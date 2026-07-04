@@ -15,6 +15,16 @@ class Settings(BaseSettings):
     LIVEKIT_API_KEY: str = Field(description="LiveKit API Key")
     LIVEKIT_API_SECRET: str = Field(description="LiveKit API Secret")
 
+    # CORS Settings
+    ALLOWED_ORIGINS: str = "http://localhost:3000,http://127.0.0.1:3000"
+
+    @property
+    def cors_origins(self) -> list[str]:
+        """
+        Parses the comma-separated ALLOWED_ORIGINS string into a list of origins.
+        """
+        return [o.strip() for o in self.ALLOWED_ORIGINS.split(",") if o.strip()]
+
     # Resolve schema-validated URL for LiveKit REST APIs
     @property
     def livekit_api_url(self) -> str:
