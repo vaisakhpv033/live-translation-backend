@@ -52,6 +52,7 @@ sudo apt install nginx git -y
    LIVEKIT_API_KEY=your_api_key
    LIVEKIT_API_SECRET=your_api_secret
    PORT=8000
+   ALLOWED_ORIGINS=https://your-domain.com,http://localhost:3000,http://localhost:5173
    ```
 
 3. **Start the Backend Container**:
