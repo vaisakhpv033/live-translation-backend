@@ -1,7 +1,18 @@
 from fastapi import Depends
 from livekit import api
-from app.core.livekit import get_livekit_client
+from sqlalchemy.ext.asyncio import AsyncSession
+from app.core.livekit import get_livekit_client, get_sts_livekit_client
+from app.core.database import get_db_session
 from app.services.livekit_service import IRoomService, LiveKitRoomService
+from app.services.sts_room_service import ISTSRoomService, LiveKitSTSRoomService
+from app.services.report_service import IReportService, ReportService
+from app.services.evaluation_service import GeminiEvaluationService
+from app.repositories.report_repository import SQLAlchemyReportRepository
+
+
+# ──────────────────────────────────────────────────────────────
+#  Translation Agent Dependencies
+# ──────────────────────────────────────────────────────────────
 
 def get_livekit_api_client() -> api.LiveKitAPI:
     """
@@ -17,3 +28,38 @@ def get_room_service(
     Ensures dependency inversion by returning the interface abstraction.
     """
     return LiveKitRoomService(lk_client)
+
+
+# ──────────────────────────────────────────────────────────────
+#  STS Agent Dependencies
+# ──────────────────────────────────────────────────────────────
+
+def get_sts_livekit_api_client() -> api.LiveKitAPI:
+    """
+    FastAPI dependency that returns the STS LiveKitAPI client.
+    """
+    return get_sts_livekit_client()
+
+def get_sts_room_service(
+    lk_client: api.LiveKitAPI = Depends(get_sts_livekit_api_client)
+) -> ISTSRoomService:
+    """
+    FastAPI dependency that returns an ISTSRoomService backed by the STS LiveKit client.
+    """
+    return LiveKitSTSRoomService(lk_client)
+
+
+# ──────────────────────────────────────────────────────────────
+#  Report Dependencies
+# ──────────────────────────────────────────────────────────────
+
+def get_report_service(
+    db: AsyncSession = Depends(get_db_session)
+) -> IReportService:
+    """
+    FastAPI dependency that returns an IReportService.
+    Wires together the repository and evaluation service layers.
+    """
+    repository = SQLAlchemyReportRepository(db)
+    evaluation_service = GeminiEvaluationService()
+    return ReportService(repository, evaluation_service)
