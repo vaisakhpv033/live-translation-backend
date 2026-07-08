@@ -10,10 +10,24 @@ class Settings(BaseSettings):
     API_V1_STR: str = "/api/v1"
     PORT: int = 8000
 
-    # LiveKit credentials
+    # LiveKit credentials (Translation Agent)
     LIVEKIT_URL: str = Field(description="The WebSocket/HTTP URL for LiveKit server")
     LIVEKIT_API_KEY: str = Field(description="LiveKit API Key")
     LIVEKIT_API_SECRET: str = Field(description="LiveKit API Secret")
+
+    # STS Agent LiveKit credentials (separate LiveKit project)
+    STS_LIVEKIT_URL: str = Field(description="LiveKit URL for the STS agent project")
+    STS_LIVEKIT_API_KEY: str = Field(description="LiveKit API Key for STS project")
+    STS_LIVEKIT_API_SECRET: str = Field(description="LiveKit API Secret for STS project")
+
+    # PostgreSQL Database
+    DATABASE_URL: str = Field(
+        default="postgresql+asyncpg://backend_user:backend_pass@localhost:5432/translation_backend",
+        description="Async PostgreSQL connection string"
+    )
+
+    # Gemini API (for report evaluation)
+    GEMINI_API_KEY: str = Field(description="Gemini API key for chat transcript evaluation")
 
     # CORS Settings
     ALLOWED_ORIGINS: str = "http://localhost:3000,http://127.0.0.1:3000"
@@ -33,6 +47,18 @@ class Settings(BaseSettings):
         by the LiveKitAPI REST/Twirp client.
         """
         url = self.LIVEKIT_URL
+        if url.startswith("wss://"):
+            return url.replace("wss://", "https://")
+        elif url.startswith("ws://"):
+            return url.replace("ws://", "http://")
+        return url
+
+    @property
+    def sts_livekit_api_url(self) -> str:
+        """
+        Converts the STS LiveKit WebSocket schema to HTTP/HTTPS for REST API usage.
+        """
+        url = self.STS_LIVEKIT_URL
         if url.startswith("wss://"):
             return url.replace("wss://", "https://")
         elif url.startswith("ws://"):
