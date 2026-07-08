@@ -3,7 +3,11 @@ from contextlib import asynccontextmanager
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 from app.core.config import get_settings
-from app.core.livekit import init_livekit_client, close_livekit_client
+from app.core.livekit import (
+    init_livekit_client, close_livekit_client,
+    init_sts_livekit_client, close_sts_livekit_client,
+)
+from app.core.database import init_db, close_db
 from app.api.v1.router import api_router
 
 # Configure logging
@@ -19,13 +23,27 @@ settings = get_settings()
 async def lifespan(app: FastAPI):
     """
     Handles application startup and shutdown events (SOLID Single Responsibility).
-    Ensures LiveKit API client is gracefully created and cleaned up.
+    Ensures LiveKit API clients and database are gracefully created and cleaned up.
     """
-    logger.info("Initializing LiveKit API Client on startup...")
+    logger.info("Initializing Translation LiveKit API Client...")
     await init_livekit_client()
+
+    logger.info("Initializing STS LiveKit API Client...")
+    await init_sts_livekit_client()
+
+    logger.info("Initializing PostgreSQL database...")
+    await init_db(settings.DATABASE_URL)
+
     yield
-    logger.info("Closing LiveKit API Client on shutdown...")
+
+    logger.info("Closing Translation LiveKit API Client...")
     await close_livekit_client()
+
+    logger.info("Closing STS LiveKit API Client...")
+    await close_sts_livekit_client()
+
+    logger.info("Closing database connections...")
+    await close_db()
 
 app = FastAPI(
     title=settings.PROJECT_NAME,
