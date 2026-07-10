@@ -61,8 +61,9 @@ class LiveKitRoomService(IRoomService):
         )
         room_info = await self.client.room.create_room(request)
 
-        # Dispatch the analysis-agent and translation-agent explicitly to this room
-        for agent_name in ["translation-agent", "analysis-agent"]:
+        # Dispatch the requested agents explicitly to this room
+        agents_to_dispatch = room_in.agents_to_dispatch or []
+        for agent_name in agents_to_dispatch:
             try:
                 existing_dispatches = await self.client.agent_dispatch.list_dispatch(
                     room_name=room_in.name

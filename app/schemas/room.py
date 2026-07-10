@@ -9,6 +9,7 @@ class RoomCreate(BaseModel):
     empty_timeout: int = Field(300, description="Time in seconds to wait before closing an empty room")
     max_participants: int = Field(20, description="Maximum number of participants allowed in the room")
     metadata: Optional[str] = Field(None, description="Optional metadata string for the room")
+    agents_to_dispatch: Optional[List[str]] = Field(default_factory=list, description="Optional list of agent names to explicitly dispatch to this room")
 
 class ParticipantInfo(BaseModel):
     """
