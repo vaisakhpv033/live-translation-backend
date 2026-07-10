@@ -17,11 +17,18 @@ async def generate_token(
     Injects spoken language and target language as participant attributes.
     """
     try:
-        # Check if the room exists or is active (optional, depending on flow)
-        # For ease of join flow, we can let them generate a token even if room is not yet started,
-        # since joining a non-existent room in LiveKit will auto-create it if allowed.
+        # Check if the room exists on the server first
+        room_info = await room_service.get_room(room_name)
+        if not room_info:
+            raise HTTPException(
+                status_code=status.HTTP_404_NOT_FOUND,
+                detail=f"Room '{room_name}' not found. Please ensure the host has started the room first."
+            )
+
         token_response = room_service.generate_token(room_name, token_req)
         return token_response
+    except HTTPException:
+        raise
     except Exception as e:
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,

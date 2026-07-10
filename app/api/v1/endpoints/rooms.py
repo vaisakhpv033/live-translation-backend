@@ -78,6 +78,8 @@ async def delete_room(
                 status_code=status.HTTP_400_BAD_REQUEST,
                 detail=f"Failed to close room '{room_name}'"
             )
+    except HTTPException:
+        raise
     except Exception as e:
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
@@ -100,6 +102,8 @@ async def remove_participant(
                 status_code=status.HTTP_400_BAD_REQUEST,
                 detail=f"Failed to remove participant '{identity}' from room '{room_name}'"
             )
+    except HTTPException:
+        raise
     except Exception as e:
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
