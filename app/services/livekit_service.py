@@ -60,6 +60,30 @@ class LiveKitRoomService(IRoomService):
             metadata=room_in.metadata
         )
         room_info = await self.client.room.create_room(request)
+
+        # Dispatch the analysis-agent and translation-agent explicitly to this room
+        for agent_name in ["translation-agent", "analysis-agent"]:
+            try:
+                existing_dispatches = await self.client.agent_dispatch.list_dispatch(
+                    room_name=room_in.name
+                )
+                already_dispatched = any(
+                    d.agent_name == agent_name for d in existing_dispatches
+                )
+
+                if not already_dispatched:
+                    logger.info(f"Triggering explicit agent dispatch for {agent_name} in room {room_in.name}")
+                    dispatch_request = api.CreateAgentDispatchRequest(
+                        agent_name=agent_name,
+                        room=room_in.name
+                    )
+                    await self.client.agent_dispatch.create_dispatch(dispatch_request)
+                    logger.info(f"Successfully dispatched {agent_name} to room {room_in.name}")
+                else:
+                    logger.info(f"{agent_name} already dispatched in room {room_in.name}, skipping")
+            except Exception as e:
+                logger.warning(f"Failed to create explicit agent dispatch for {agent_name} in room {room_in.name}: {e}")
+
         return RoomResponse(
             name=room_info.name,
             sid=room_info.sid,
