@@ -1,7 +1,7 @@
 import logging
 import asyncio
 from datetime import datetime, UTC
-from app.core.database import _async_session_factory
+from app.core import database as db
 from app.repositories.report_repository import SQLAlchemyReportRepository
 from app.services.evaluation_service import GeminiEvaluationService
 from app.services.report_service import ReportService
@@ -34,12 +34,12 @@ async def run_background_evaluation(
     Standard background evaluation task runner.
     Creates a new scoped database session and runs Gemini evaluation.
     """
-    if _async_session_factory is None:
+    if db._async_session_factory is None:
         logger.error(f"Cannot run evaluation for job {job_id}: Database session factory is None.")
         return
 
     logger.info(f"Starting background evaluation task for job: {job_id} (scenario={scenario})")
-    async with _async_session_factory() as session:
+    async with db._async_session_factory() as session:
         try:
             repository = SQLAlchemyReportRepository(session)
             evaluation_service = GeminiEvaluationService()
@@ -56,10 +56,11 @@ async def recover_stuck_reports(threshold_seconds: int = 300) -> None:
     Scans the database for reports with status 'ongoing' that exceed threshold_seconds
     and restarts their evaluations in the background.
     """
-    if _async_session_factory is None:
+    if db._async_session_factory is None:
+        logger.warning("Database session factory is not initialized. Cannot run recovery sweep.")
         return
 
-    async with _async_session_factory() as session:
+    async with db._async_session_factory() as session:
         try:
             repository = SQLAlchemyReportRepository(session)
             ongoing_reports = await repository.get_ongoing_reports()
