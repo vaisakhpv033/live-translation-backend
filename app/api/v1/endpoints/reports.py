@@ -1,5 +1,5 @@
 import json
-from fastapi import APIRouter, Depends, HTTPException, BackgroundTasks, status
+from fastapi import APIRouter, Depends, HTTPException, BackgroundTasks, status, Response
 from app.schemas.report import ReportCreate, ReportDetail, ReportListResponse
 from app.services.report_service import IReportService
 from app.api.dependencies import get_report_service
@@ -77,11 +77,16 @@ async def get_report(
 @router.get("/{job_id}/status")
 async def get_report_status(
     job_id: str,
+    response: Response,
     report_service: IReportService = Depends(get_report_service),
 ):
     """
     Returns the evaluation status of a report.
     """
+    response.headers["Cache-Control"] = "no-store, no-cache, must-revalidate, max-age=0"
+    response.headers["Pragma"] = "no-cache"
+    response.headers["Expires"] = "0"
+
     result = await report_service.get_report_status(job_id)
     if result is None:
         raise HTTPException(
