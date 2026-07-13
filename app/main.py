@@ -36,8 +36,13 @@ async def lifespan(app: FastAPI):
 
     # Self-healing database sweep for ongoing reports
     import asyncio
-    from app.services.background_evaluation import sweep_and_recover_reports
+    from app.services.background_evaluation import sweep_and_recover_reports, periodic_sweep_loop
+    
+    # 1. Immediate sweep of all ongoing reports on boot
     asyncio.create_task(sweep_and_recover_reports())
+    
+    # 2. Continuous background periodic loop (interval 5 mins, stuck threshold 5 mins)
+    asyncio.create_task(periodic_sweep_loop(interval_seconds=300, stuck_threshold_seconds=300))
 
     yield
 
