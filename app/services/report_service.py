@@ -38,6 +38,11 @@ class IReportService(ABC):
         """Re-runs Gemini evaluation on a stored report's chat history."""
         pass
 
+    @abstractmethod
+    async def get_ongoing_reports(self) -> list[dict]:
+        """Retrieves all reports with status = 'ongoing'."""
+        pass
+
 
 class ReportService(IReportService):
     """
@@ -213,6 +218,10 @@ class ReportService(IReportService):
             "chat_history": row.get("chat_history"),
             "scenario": row.get("scenario", "sbi"),
         }
+
+    async def get_ongoing_reports(self) -> list[dict]:
+        logger.info("Getting all ongoing reports from repository")
+        return await self.repository.get_ongoing_reports()
 
     @staticmethod
     def _extract_readiness(summary_str: Optional[str]) -> str:

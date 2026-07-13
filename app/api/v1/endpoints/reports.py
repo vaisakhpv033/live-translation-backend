@@ -3,10 +3,7 @@ from fastapi import APIRouter, Depends, HTTPException, BackgroundTasks, status
 from app.schemas.report import ReportCreate, ReportDetail, ReportListResponse
 from app.services.report_service import IReportService
 from app.api.dependencies import get_report_service
-from app.services.evaluation_service import GeminiEvaluationService
-from app.repositories.report_repository import SQLAlchemyReportRepository
-from app.core.database import get_db_session
-from sqlalchemy.ext.asyncio import AsyncSession
+from app.services.background_evaluation import run_background_evaluation
 
 router = APIRouter()
 
@@ -30,7 +27,7 @@ async def receive_report(
             chat_history_str = json.dumps(payload.chat_history)
 
         background_tasks.add_task(
-            _run_background_evaluation,
+            run_background_evaluation,
             payload.job_id,
             chat_history_str,
             payload.scenario or "sbi",
@@ -112,7 +109,7 @@ async def retry_report_evaluation(
 
     # Schedule background re-evaluation
     background_tasks.add_task(
-        _run_background_evaluation,
+        run_background_evaluation,
         job_id,
         result.get("chat_history"),
         result.get("scenario", "sbi"),
@@ -120,30 +117,3 @@ async def retry_report_evaluation(
 
     return {"status": "success", "message": f"Retry evaluation started for job {job_id}."}
 
-
-async def _run_background_evaluation(
-    job_id: str, chat_history_str: str | None, scenario: str
-) -> None:
-    """
-    Background task that creates its own database session and runs Gemini evaluation.
-    Necessary because FastAPI BackgroundTasks run outside the request lifecycle.
-    """
-    from app.core.database import _async_session_factory
-
-    if _async_session_factory is None:
-        return
-
-    async with _async_session_factory() as session:
-        try:
-            repository = SQLAlchemyReportRepository(session)
-            evaluation_service = GeminiEvaluationService()
-            report_service = ReportService(repository, evaluation_service)
-            await report_service.evaluate_and_update(job_id, chat_history_str, scenario)
-            await session.commit()
-        except Exception:
-            await session.rollback()
-            raise
-
-
-# Import here to avoid circular dependency in background task
-from app.services.report_service import ReportService

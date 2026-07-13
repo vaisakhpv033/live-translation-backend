@@ -1,5 +1,6 @@
 import json
 import logging
+import asyncio
 from abc import ABC, abstractmethod
 from typing import Optional, Tuple
 import httpx
@@ -246,31 +247,48 @@ class GeminiEvaluationService(IEvaluationService):
             }
         }
 
-        try:
-            async with httpx.AsyncClient(timeout=60.0) as client:
-                response = await client.post(url, headers=headers, json=payload)
-                if response.status_code != 200:
-                    logger.error(f"Gemini API returned status {response.status_code}: {response.text}")
-                    return None, 0
+        max_retries = 3
+        backoff_factor = 2.0
 
-                response_json = response.json()
-                candidates = response_json.get("candidates", [])
-                if not candidates:
-                    logger.error(f"No candidates returned from Gemini: {response_json}")
-                    return None, 0
+        for attempt in range(max_retries):
+            try:
+                async with httpx.AsyncClient(timeout=60.0) as client:
+                    response = await client.post(url, headers=headers, json=payload)
+                    
+                    if response.status_code == 200:
+                        response_json = response.json()
+                        candidates = response_json.get("candidates", [])
+                        if not candidates:
+                            logger.error(f"No candidates returned from Gemini: {response_json}")
+                            return None, 0
 
-                content_text = candidates[0].get("content", {}).get("parts", [{}])[0].get("text", "")
-                if not content_text:
-                    logger.error("Empty text in Gemini response candidate.")
-                    return None, 0
+                        content_text = candidates[0].get("content", {}).get("parts", [{}])[0].get("text", "")
+                        if not content_text:
+                            logger.error("Empty text in Gemini response candidate.")
+                            return None, 0
 
-                report_card = json.loads(content_text.strip())
-                overall_score = report_card.get("overall_score", 0)
-                return report_card, overall_score
-
-        except Exception as e:
-            logger.exception(f"Exception during Gemini evaluation: {e}")
-            return None, 0
+                        report_card = json.loads(content_text.strip())
+                        overall_score = report_card.get("overall_score", 0)
+                        return report_card, overall_score
+                    
+                    if response.status_code in [429, 500, 502, 503, 504]:
+                        logger.warning(
+                            f"Gemini API returned status {response.status_code}. "
+                            f"Attempt {attempt + 1} of {max_retries}. Retrying..."
+                        )
+                    else:
+                        logger.error(f"Gemini API returned unrecoverable status {response.status_code}: {response.text}")
+                        return None, 0
+                        
+            except (httpx.RequestError, json.JSONDecodeError) as e:
+                logger.warning(f"Error during Gemini call attempt {attempt + 1}: {e}")
+                
+            if attempt < max_retries - 1:
+                sleep_time = backoff_factor ** attempt
+                await asyncio.sleep(sleep_time)
+                
+        logger.error("Gemini API call failed after max retries.")
+        return None, 0
 
     @staticmethod
     def _format_transcript(chat_history_str: Optional[str]) -> str:

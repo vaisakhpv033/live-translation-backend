@@ -30,6 +30,11 @@ class IReportRepository(ABC):
         pass
 
     @abstractmethod
+    async def get_ongoing_reports(self) -> List[dict]:
+        """Retrieves all reports with status = 'ongoing'."""
+        pass
+
+    @abstractmethod
     async def update_summary(
         self, job_id: str, summary: Optional[str], overall_score: int, status: str
     ) -> None:
@@ -113,6 +118,13 @@ class SQLAlchemyReportRepository(IReportRepository):
     async def get_all(self) -> List[dict]:
         logger.info("Fetching all reports")
         stmt = select(Report).order_by(Report.ended_at.desc())
+        result = await self.session.execute(stmt)
+        rows = result.scalars().all()
+        return [self._row_to_dict(row) for row in rows]
+
+    async def get_ongoing_reports(self) -> List[dict]:
+        logger.info("Fetching all ongoing reports")
+        stmt = select(Report).where(Report.status == "ongoing")
         result = await self.session.execute(stmt)
         rows = result.scalars().all()
         return [self._row_to_dict(row) for row in rows]

@@ -34,6 +34,11 @@ async def lifespan(app: FastAPI):
     logger.info("Initializing PostgreSQL database...")
     await init_db(settings.DATABASE_URL)
 
+    # Self-healing database sweep for ongoing reports
+    import asyncio
+    from app.services.background_evaluation import sweep_and_recover_reports
+    asyncio.create_task(sweep_and_recover_reports())
+
     yield
 
     logger.info("Closing Translation LiveKit API Client...")
