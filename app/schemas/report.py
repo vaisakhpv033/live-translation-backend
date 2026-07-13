@@ -34,6 +34,7 @@ class ReportSummary(BaseModel):
     customer_name: Optional[str] = None
     agent_type: Optional[str] = None
     scenario: Optional[str] = None
+    readiness_assessment: Optional[str] = None
 
 
 class ReportDetail(BaseModel):

@@ -117,6 +117,7 @@ class ReportService(IReportService):
         }
 
         for r in rows:
+            readiness = self._extract_readiness(r.get("summary")) if r.get("status") == "completed" else "Developing"
             reports.append(
                 ReportSummary(
                     job_id=r["job_id"],
@@ -129,6 +130,7 @@ class ReportService(IReportService):
                     customer_name=r.get("customer_name"),
                     agent_type=r.get("agent_type"),
                     scenario=r.get("scenario"),
+                    readiness_assessment=readiness,
                 )
             )
 
