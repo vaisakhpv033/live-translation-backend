@@ -174,10 +174,34 @@ class ReportService(IReportService):
             except Exception:
                 pass
 
-        chat_history = row.get("chat_history")
-        if chat_history and isinstance(chat_history, str):
+        chat_history_raw = row.get("chat_history")
+        chat_history = []
+        if chat_history_raw and isinstance(chat_history_raw, str):
             try:
-                chat_history = json.loads(chat_history)
+                data = json.loads(chat_history_raw)
+                if isinstance(data, dict) and "items" in data:
+                    items = data.get("items", [])
+                    for item in items:
+                        if item.get("type") != "message":
+                            continue
+                        role = item.get("role")
+                        if role == "system":
+                            continue
+
+                        content_list = item.get("content", [])
+                        text = ""
+                        if isinstance(content_list, list):
+                            text = " ".join([str(c) for c in content_list if isinstance(c, str)])
+                        elif isinstance(content_list, str):
+                            text = content_list
+
+                        chat_history.append({
+                            "role": role,
+                            "text": text,
+                            "interrupted": item.get("interrupted", False)
+                        })
+                elif isinstance(data, list):
+                    chat_history = data
             except Exception:
                 pass
 
