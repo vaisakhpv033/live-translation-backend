@@ -107,6 +107,7 @@ class SQLAlchemyReportRepository(IReportRepository):
         )
 
         await self.session.execute(stmt)
+        await self.session.commit()
 
     async def get_by_job_id(self, job_id: str) -> Optional[dict]:
         logger.info(f"Fetching report: {job_id}")
