@@ -33,7 +33,7 @@ async def init_db(database_url: str) -> None:
     _async_session_factory = async_sessionmaker(_engine, expire_on_commit=False)
 
     # Create tables (import models before this runs so they register with Base)
-    from app.models import report  # noqa: F401 — ensures Report model is registered
+    from app.models import report, career_data  # noqa: F401 — ensures models are registered
     async with _engine.begin() as conn:
         await conn.run_sync(Base.metadata.create_all)
     logger.info("Database tables created successfully.")

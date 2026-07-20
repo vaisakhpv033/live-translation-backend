@@ -6,8 +6,11 @@ from app.core.database import get_db_session
 from app.services.livekit_service import IRoomService, LiveKitRoomService
 from app.services.sts_room_service import ISTSRoomService, LiveKitSTSRoomService
 from app.services.report_service import IReportService, ReportService
+from app.services.career_data_service import ICareerRecordService, CareerRecordService
 from app.services.evaluation_service import GeminiEvaluationService
+from app.services.telephony_service import ITelephonyService, LiveKitTelephonyService
 from app.repositories.report_repository import SQLAlchemyReportRepository
+from app.repositories.career_data_repository import SQLAlchemyCareerRecordRepository
 
 
 # ──────────────────────────────────────────────────────────────
@@ -50,6 +53,20 @@ def get_sts_room_service(
 
 
 # ──────────────────────────────────────────────────────────────
+#  Telephony Dependencies (reuses the STS LiveKit client)
+# ──────────────────────────────────────────────────────────────
+
+def get_telephony_service(
+    lk_client: api.LiveKitAPI = Depends(get_sts_livekit_api_client)
+) -> ITelephonyService:
+    """
+    FastAPI dependency that returns an ITelephonyService backed by the STS LiveKit client.
+    Reuses the same client that powers STS rooms — zero credential duplication.
+    """
+    return LiveKitTelephonyService(lk_client)
+
+
+# ──────────────────────────────────────────────────────────────
 #  Report Dependencies
 # ──────────────────────────────────────────────────────────────
 
@@ -63,3 +80,20 @@ def get_report_service(
     repository = SQLAlchemyReportRepository(db)
     evaluation_service = GeminiEvaluationService()
     return ReportService(repository, evaluation_service)
+
+
+# ──────────────────────────────────────────────────────────────
+#  Career Record Dependencies
+# ──────────────────────────────────────────────────────────────
+
+def get_career_record_service(
+    db: AsyncSession = Depends(get_db_session)
+) -> ICareerRecordService:
+    """
+    FastAPI dependency that returns an ICareerRecordService.
+    Wires together the SQLAlchemy repository and Gemini evaluation service.
+    """
+    repository = SQLAlchemyCareerRecordRepository(db)
+    evaluation_service = GeminiEvaluationService()
+    return CareerRecordService(repository, evaluation_service)
+

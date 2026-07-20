@@ -211,6 +211,69 @@ SCENARIO_PROMPTS = {
     "live-call": SYSTEM_PROMPT_LIVE_CALL,
 }
 
+CAREER_EXTRACTION_SCHEMA = {
+    "type": "OBJECT",
+    "properties": {
+        "student_name": {
+            "type": "STRING",
+            "description": "Name of the student/caller. If not mentioned or unknown, use 'Student' or 'Unknown'."
+        },
+        "current_status": {
+            "type": "STRING",
+            "description": "What the student is studying or doing currently (e.g. B.Sc, working, finished high school)."
+        },
+        "next_study_program": {
+            "type": "STRING",
+            "description": "What course or graduation program they are looking to pursue next (e.g. Master in CS, MBA)."
+        },
+        "future_goals": {
+            "type": "STRING",
+            "description": "Their future plans, career goals, or long-term objectives after graduation."
+        },
+        "plans_foreign_institutes": {
+            "type": "STRING",
+            "description": "Details about their plans to join foreign universities/institutes (e.g. Target countries, specific universities, or if they are undecided)."
+        },
+        "active_search_status": {
+            "type": "STRING",
+            "description": "Whether they are actively looking for opportunities/admissions right now (e.g. 'Actively searching', 'Just exploring', 'Not interested')."
+        },
+        "conviction_tier": {
+            "type": "STRING",
+            "description": "Assign one of the following priority tiers:\n"
+                           "- 'Tier A' (High Potential): Highly active search, plans to study abroad within 1 year, clear graduation goals, responsive and interested in admissions/consultancy. Needs immediate follow-up.\n"
+                           "- 'Tier B' (Medium Potential): Interested in studying abroad but timeline is longer (e.g. 2+ years) or budget/target is undecided. Needs nurturing.\n"
+                           "- 'Tier C' (Low Potential): Unclear future plans, not planning/interested in joining foreign institutes, or unresponsive/uninterested. Low priority.\n"
+                           "- 'Tier D' (Not Interested / Bad Fit): Explicitly stated they have no plans or interest in foreign education, or requested not to be contacted. Do not follow up."
+        },
+        "conviction_rationale": {
+            "type": "STRING",
+            "description": "A clear, concise explanation justifying the assigned conviction tier based on their answers."
+        }
+    },
+    "required": [
+        "student_name",
+        "current_status",
+        "next_study_program",
+        "future_goals",
+        "plans_foreign_institutes",
+        "active_search_status",
+        "conviction_tier",
+        "conviction_rationale"
+    ]
+}
+
+CAREER_EXTRACTION_SYSTEM_PROMPT = """You are an expert career intake analyst.
+Your task is to analyze the conversation transcript between a Career Support Representative and a student.
+Extract the student's current status, future study plans, future goals, plans for foreign education, and their readiness level.
+
+CRITICAL INSTRUCTIONS FOR MULTILINGUAL TRANSCRIPTS:
+- The conversation might be in English, a regional Indian language (e.g. Hindi, Malayalam, Tamil, Telugu, etc.), or a mix of languages (e.g. Hinglish).
+- You MUST analyze and understand the conversation regardless of the language used.
+- All extracted details (student_name, current_status, next_study_program, future_goals, plans_foreign_institutes, active_search_status, conviction_rationale) MUST be written in English. Translate any non-English replies or details from the transcript to clear English for the database.
+
+Assess how promising the student is as a lead/customer for a study-abroad consultancy, and assign them a conviction tier (Tier A, Tier B, Tier C, or Tier D) with a clear, professional rationale."""
+
 
 # ──────────────────────────────────────────────────────────────
 #  Evaluation Service Interface and Implementation
@@ -227,6 +290,16 @@ class IEvaluationService(ABC):
         """
         Evaluates a chat transcript and returns (report_card_dict, overall_score).
         Returns (None, 0) on failure.
+        """
+        pass
+
+    @abstractmethod
+    async def extract_career_details(
+        self, chat_history_str: Optional[str]
+    ) -> Optional[dict]:
+        """
+        Extracts structured student/career details and assigns conviction tier.
+        Returns None on failure.
         """
         pass
 
@@ -308,6 +381,74 @@ class GeminiEvaluationService(IEvaluationService):
         logger.error("Gemini API call failed after max retries.")
         return None, 0
 
+    async def extract_career_details(
+        self, chat_history_str: Optional[str]
+    ) -> Optional[dict]:
+        api_key = settings.GEMINI_API_KEY
+        if not api_key:
+            logger.error("Gemini API key not configured for career data extraction.")
+            return None
+
+        transcript = self._format_transcript_career(chat_history_str)
+        prompt = f"{CAREER_EXTRACTION_SYSTEM_PROMPT}\n\nHere is the conversation transcript:\n{transcript}"
+
+        url = f"https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:generateContent?key={api_key}"
+        headers = {"Content-Type": "application/json"}
+
+        payload = {
+            "contents": [
+                {
+                    "parts": [{"text": prompt}]
+                }
+            ],
+            "generationConfig": {
+                "responseMimeType": "application/json",
+                "responseSchema": CAREER_EXTRACTION_SCHEMA
+            }
+        }
+
+        max_retries = 3
+        backoff_factor = 2.0
+
+        for attempt in range(max_retries):
+            try:
+                async with httpx.AsyncClient(timeout=60.0) as client:
+                    response = await client.post(url, headers=headers, json=payload)
+                    
+                    if response.status_code == 200:
+                        response_json = response.json()
+                        candidates = response_json.get("candidates", [])
+                        if not candidates:
+                            logger.error(f"No candidates returned from Gemini during career extraction: {response_json}")
+                            return None
+
+                        content_text = candidates[0].get("content", {}).get("parts", [{}])[0].get("text", "")
+                        if not content_text:
+                            logger.error("Empty text in Gemini response candidate during career extraction.")
+                            return None
+
+                        extracted_data = json.loads(content_text.strip())
+                        return extracted_data
+                    
+                    if response.status_code in [429, 500, 502, 503, 504]:
+                        logger.warning(
+                            f"Gemini API returned status {response.status_code} during career extraction. "
+                            f"Attempt {attempt + 1} of {max_retries}. Retrying..."
+                        )
+                    else:
+                        logger.error(f"Gemini API returned unrecoverable status {response.status_code} during career extraction: {response.text}")
+                        return None
+                        
+            except (httpx.RequestError, json.JSONDecodeError) as e:
+                logger.warning(f"Error during Gemini career extraction call attempt {attempt + 1}: {e}")
+                
+            if attempt < max_retries - 1:
+                sleep_time = backoff_factor ** attempt
+                await asyncio.sleep(sleep_time)
+                
+        logger.error("Gemini API call for career extraction failed after max retries.")
+        return None
+
     @staticmethod
     def _format_transcript(chat_history_str: Optional[str]) -> str:
         """Parses LiveKit chat history JSON into a readable transcript."""
@@ -335,6 +476,39 @@ class GeminiEvaluationService(IEvaluationService):
                     continue
 
                 speaker = "Ira Representative" if role == "user" else "AI Customer"
+                lines.append(f"{speaker}: {text.strip()}")
+
+            return "\n".join(lines)
+        except Exception as e:
+            return f"Error parsing transcript: {e}"
+
+    @staticmethod
+    def _format_transcript_career(chat_history_str: Optional[str]) -> str:
+        """Parses LiveKit chat history JSON into a readable transcript for career agent."""
+        if not chat_history_str:
+            return "No transcript available."
+        try:
+            data = json.loads(chat_history_str)
+            items = data.get("items", [])
+            lines = []
+            for item in items:
+                if item.get("type") != "message":
+                    continue
+                role = item.get("role")
+                if role == "system":
+                    continue
+
+                content_list = item.get("content", [])
+                text = ""
+                if isinstance(content_list, list):
+                    text = " ".join([str(c) for c in content_list if isinstance(c, str)])
+                elif isinstance(content_list, str):
+                    text = content_list
+
+                if not text.strip():
+                    continue
+
+                speaker = "Student" if role == "user" else "Career Representative"
                 lines.append(f"{speaker}: {text.strip()}")
 
             return "\n".join(lines)
