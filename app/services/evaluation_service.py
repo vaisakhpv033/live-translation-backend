@@ -226,10 +226,6 @@ CAREER_EXTRACTION_SCHEMA = {
             "type": "STRING",
             "description": "What course or graduation program they are looking to pursue next (e.g. Master in CS, MBA)."
         },
-        "future_goals": {
-            "type": "STRING",
-            "description": "Their future plans, career goals, or long-term objectives after graduation."
-        },
         "plans_foreign_institutes": {
             "type": "STRING",
             "description": "Details about their plans to join foreign universities/institutes (e.g. Target countries, specific universities, or if they are undecided)."
@@ -255,7 +251,6 @@ CAREER_EXTRACTION_SCHEMA = {
         "student_name",
         "current_status",
         "next_study_program",
-        "future_goals",
         "plans_foreign_institutes",
         "active_search_status",
         "conviction_tier",
@@ -265,12 +260,12 @@ CAREER_EXTRACTION_SCHEMA = {
 
 CAREER_EXTRACTION_SYSTEM_PROMPT = """You are an expert career intake analyst.
 Your task is to analyze the conversation transcript between a Career Support Representative and a student.
-Extract the student's current status, future study plans, future goals, plans for foreign education, and their readiness level.
+Extract the student's current status, future study plans, plans for foreign education, and their readiness level.
 
 CRITICAL INSTRUCTIONS FOR MULTILINGUAL TRANSCRIPTS:
 - The conversation might be in English, a regional Indian language (e.g. Hindi, Malayalam, Tamil, Telugu, etc.), or a mix of languages (e.g. Hinglish).
 - You MUST analyze and understand the conversation regardless of the language used.
-- All extracted details (student_name, current_status, next_study_program, future_goals, plans_foreign_institutes, active_search_status, conviction_rationale) MUST be written in English. Translate any non-English replies or details from the transcript to clear English for the database.
+- All extracted details (student_name, current_status, next_study_program, plans_foreign_institutes, active_search_status, conviction_rationale) MUST be written in English. Translate any non-English replies or details from the transcript to clear English for the database.
 
 Assess how promising the student is as a lead/customer for a study-abroad consultancy, and assign them a conviction tier (Tier A, Tier B, Tier C, or Tier D) with a clear, professional rationale."""
 
