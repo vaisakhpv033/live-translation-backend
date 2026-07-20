@@ -29,6 +29,12 @@ class Settings(BaseSettings):
     # Gemini API (for report evaluation)
     GEMINI_API_KEY: str = Field(description="Gemini API key for chat transcript evaluation")
 
+    # Twilio SIP Telephony
+    TWILIO_PHONE_NUMBER: str = Field(default="", description="Twilio phone number in E.164 format (e.g. +16183427090)")
+    TWILIO_SIP_DOMAIN: str = Field(default="", description="Twilio SIP Termination URI (e.g. xxx.pstn.twilio.com)")
+    TWILIO_SIP_USERNAME: str = Field(default="", description="SIP trunk authentication username")
+    TWILIO_SIP_PASSWORD: str = Field(default="", description="SIP trunk authentication password")
+
     # CORS Settings
     ALLOWED_ORIGINS: str = "http://localhost:3000,http://127.0.0.1:3000"
 
