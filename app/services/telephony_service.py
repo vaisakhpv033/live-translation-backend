@@ -23,7 +23,7 @@ TELEPHONY_AGENT_NAME = "Customer-sts"
 
 # Readiness gate configuration (Pattern B: wait for agent before dialing)
 AGENT_READINESS_POLL_INTERVAL_S = 0.5   # Check every 500ms
-AGENT_READINESS_TIMEOUT_S = 15.0        # Fail if agent doesn't join within 15 seconds
+AGENT_READINESS_TIMEOUT_S = 30.0        # Fail if agent doesn't join within 30 seconds
 
 
 class ITelephonyService(ABC):
