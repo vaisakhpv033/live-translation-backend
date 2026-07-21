@@ -1,3 +1,4 @@
+import asyncio
 import json
 import logging
 import uuid
@@ -19,6 +20,10 @@ settings = get_settings()
 # Fixed persona for all telephony calls
 TELEPHONY_PERSONA = "career-agent"
 TELEPHONY_AGENT_NAME = "Customer-sts"
+
+# Readiness gate configuration (Pattern B: wait for agent before dialing)
+AGENT_READINESS_POLL_INTERVAL_S = 0.5   # Check every 500ms
+AGENT_READINESS_TIMEOUT_S = 15.0        # Fail if agent doesn't join within 15 seconds
 
 
 class ITelephonyService(ABC):
@@ -180,6 +185,50 @@ class LiveKitTelephonyService(ITelephonyService):
             sip_domain=sip_domain,
         )
 
+    async def _wait_for_agent_ready(self, room_name: str) -> bool:
+        """
+        Polls the room's participant list until the agent worker has joined
+        and is connected. Returns True if agent is ready, False if timed out.
+        
+        This implements Pattern B (Backend Readiness Gate) to ensure
+        the agent is fully warmed up (LLM WebSocket connected, audio pipelines active)
+        before we dial the phone number. This eliminates the cold-start delay
+        that causes 5-10s of silence when the user answers the call.
+        """
+        elapsed = 0.0
+        while elapsed < AGENT_READINESS_TIMEOUT_S:
+            try:
+                part_response = await self.client.room.list_participants(
+                    api.ListParticipantsRequest(room=room_name)
+                )
+                for p in part_response.participants:
+                    # The agent worker joins with an identity starting with "agent-"
+                    # and its participant state transitions to ACTIVE (value 1) once
+                    # fully connected with audio tracks published.
+                    is_agent = (
+                        p.identity.startswith("agent-") or
+                        p.name == TELEPHONY_AGENT_NAME
+                    )
+                    # ParticipantInfo.State: JOINING=0, JOINED=1, ACTIVE=2, DISCONNECTED=3
+                    is_active = p.state in (1, 2)
+                    
+                    if is_agent and is_active:
+                        logger.info(
+                            f"Agent ready in room {room_name}: "
+                            f"identity={p.identity}, state={p.state} "
+                            f"(waited {elapsed:.1f}s)"
+                        )
+                        return True
+            except Exception as e:
+                # Room may not exist yet on the first poll — that's expected
+                logger.debug(f"Readiness poll error (expected during room creation): {e}")
+
+            await asyncio.sleep(AGENT_READINESS_POLL_INTERVAL_S)
+            elapsed += AGENT_READINESS_POLL_INTERVAL_S
+
+        logger.warning(f"Agent readiness timeout after {AGENT_READINESS_TIMEOUT_S}s in room {room_name}")
+        return False
+
     async def make_outbound_call(self, request: OutboundCallRequest) -> OutboundCallResponse:
         # Generate unique room name
         short_id = uuid.uuid4().hex[:8]
@@ -191,7 +240,7 @@ class LiveKitTelephonyService(ITelephonyService):
             "language": request.language,
         })
 
-        # 1. Dispatch the Customer-sts agent to the room
+        # ── Step 1: Dispatch the agent to the room ──────────────────────
         logger.info(f"Dispatching {TELEPHONY_AGENT_NAME} to room {room_name}")
         await self.client.agent_dispatch.create_dispatch(
             api.CreateAgentDispatchRequest(
@@ -201,7 +250,26 @@ class LiveKitTelephonyService(ITelephonyService):
             )
         )
 
-        # 2. Create SIP participant (dial the phone number)
+        # ── Step 2: Wait for agent to be fully ready (Pattern B) ────────
+        logger.info(f"Waiting for agent to join room {room_name} before dialing...")
+        agent_ready = await self._wait_for_agent_ready(room_name)
+
+        if not agent_ready:
+            # Agent didn't join in time — clean up the room and fail clearly
+            logger.error(
+                f"Agent worker failed to join room {room_name} within "
+                f"{AGENT_READINESS_TIMEOUT_S}s. Is the agent worker running?"
+            )
+            try:
+                await self.client.room.delete_room(api.DeleteRoomRequest(room=room_name))
+            except Exception:
+                pass
+            raise ValueError(
+                f"Agent worker did not join room within {AGENT_READINESS_TIMEOUT_S}s. "
+                f"Ensure the Customer-sts agent worker is running and connected to LiveKit."
+            )
+
+        # ── Step 3: Agent is ready — now dial the phone number ──────────
         participant_identity = f"phone-{uuid.uuid4().hex[:6]}"
 
         # Determine trunk configuration
