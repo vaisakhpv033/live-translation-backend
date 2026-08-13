@@ -67,6 +67,21 @@ def get_telephony_service(
 
 
 # ──────────────────────────────────────────────────────────────
+#  Naaptol Order Confirmation Dependencies
+# ──────────────────────────────────────────────────────────────
+
+def get_order_confirmation_service(
+    lk_client: api.LiveKitAPI = Depends(get_sts_livekit_api_client)
+):
+    """
+    FastAPI dependency that returns an IOrderConfirmationService backed by the STS LiveKit client.
+    """
+    from app.services.order_confirmation_service import LiveKitOrderConfirmationService
+    return LiveKitOrderConfirmationService(lk_client)
+
+
+
+# ──────────────────────────────────────────────────────────────
 #  Report Dependencies
 # ──────────────────────────────────────────────────────────────
 

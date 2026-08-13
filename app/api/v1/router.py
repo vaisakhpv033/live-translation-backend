@@ -1,5 +1,5 @@
 from fastapi import APIRouter
-from app.api.v1.endpoints import rooms, tokens, webhooks, sts_rooms, reports, telephony, career_data
+from app.api.v1.endpoints import rooms, tokens, webhooks, sts_rooms, reports, telephony, career_data, naaptol_order_confirmation
 
 api_router = APIRouter()
 
@@ -11,4 +11,6 @@ api_router.include_router(sts_rooms.router, prefix="/sts/rooms", tags=["STS Room
 api_router.include_router(reports.router, prefix="/reports", tags=["Reports"])
 api_router.include_router(telephony.router, prefix="/telephony", tags=["Telephony"])
 api_router.include_router(career_data.router, prefix="/career-data", tags=["Career Data"])
+api_router.include_router(naaptol_order_confirmation.router, prefix="/naaptol-order-confirmation", tags=["Naaptol Order Confirmation"])
+
 
