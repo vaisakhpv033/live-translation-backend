@@ -30,8 +30,8 @@ class IOrderConfirmationService(ABC):
         self, request: OrderConfirmationDialRequest
     ) -> OrderConfirmationDialResponse:
         """
-        Dispatches the naaptol-order-confirmation agent with order metadata,
-        waits for agent readiness, and dials the customer's phone number.
+        Dispatches the naaptol-order-confirmation agent into the room with order metadata,
+        waits for agent readiness to pre-warm WebSockets, and dials the customer's phone number.
         """
         pass
 
@@ -47,7 +47,7 @@ class LiveKitOrderConfirmationService(IOrderConfirmationService):
     async def _wait_for_agent_ready(self, room_name: str) -> bool:
         """
         Polls room participants until the naaptol-order-confirmation agent worker has joined
-        and transitioned to an active state. Eliminates silence/delay when customer answers.
+        and transitioned to an active state. Eliminates connection/cold-start latency before dialing.
         """
         elapsed = 0.0
         while elapsed < AGENT_READINESS_TIMEOUT_S:
@@ -56,18 +56,30 @@ class LiveKitOrderConfirmationService(IOrderConfirmationService):
                     api.ListParticipantsRequest(room=room_name)
                 )
                 for p in part_response.participants:
-                    is_agent = (
-                        p.identity.startswith("agent-") or
-                        p.name == AGENT_NAME or
-                        "OrderConfirmation" in p.identity
-                    )
                     # State: JOINING=0, JOINED=1, ACTIVE=2, DISCONNECTED=3
                     is_active = p.state in (1, 2)
-                    
-                    if is_agent and is_active:
+                    if not is_active:
+                        continue
+
+                    p_ident = (p.identity or "").lower()
+                    p_name = (p.name or "").lower()
+                    p_meta = (p.metadata or "").lower()
+                    p_attrs = {str(k).lower(): str(v).lower() for k, v in (p.attributes or {}).items()}
+
+                    is_agent = (
+                        "naaptol" in p_name or
+                        "orderconfirmation" in p_ident or
+                        "naaptol" in p_ident or
+                        "naaptol" in p_meta or
+                        "naaptol" in p_attrs.get("lk.agent.name", "") or
+                        "naaptol" in p_attrs.get("agent_name", "") or
+                        p_ident.startswith("agent-")
+                    )
+
+                    if is_agent:
                         logger.info(
-                            f"Order confirmation agent ready in room {room_name}: "
-                            f"identity={p.identity}, state={p.state} (waited {elapsed:.1f}s)"
+                            f"Order confirmation agent ready in room '{room_name}': "
+                            f"identity={p.identity}, name={p.name}, state={p.state} (waited {elapsed:.1f}s)"
                         )
                         return True
             except Exception as e:
@@ -115,9 +127,11 @@ class LiveKitOrderConfirmationService(IOrderConfirmationService):
             )
         )
 
-        # Step 2: Wait for agent to be fully ready before dialing
-        logger.info(f"Waiting for agent readiness in room {room_name}...")
+        # Step 2: Wait for agent to be fully connected and standing by (pre-warms WebRTC & Gemini WebSockets)
+        logger.info(f"Waiting for agent readiness in room '{room_name}'...")
         agent_ready = await self._wait_for_agent_ready(room_name)
+
+        await asyncio.sleep(90)
 
         if not agent_ready:
             logger.error(f"Agent worker '{AGENT_NAME}' failed to join room {room_name} in time.")
@@ -130,7 +144,7 @@ class LiveKitOrderConfirmationService(IOrderConfirmationService):
                 "Please verify the agent worker (agent.py) is running."
             )
 
-        # Step 3: Dial customer phone number
+        # Step 3: Dial customer phone number immediately — agent is already warm and ready
         participant_identity = f"phone-{uuid.uuid4().hex[:6]}"
 
         if request.outbound_trunk_id:
@@ -142,7 +156,7 @@ class LiveKitOrderConfirmationService(IOrderConfirmationService):
                 participant_identity=participant_identity,
                 participant_name=request.customer_name,
                 krisp_enabled=True,
-                play_dialtone=True,
+                play_dialtone=False,
             )
         else:
             sip_domain = settings.TWILIO_SIP_DOMAIN
@@ -163,7 +177,7 @@ class LiveKitOrderConfirmationService(IOrderConfirmationService):
                 participant_identity=participant_identity,
                 participant_name=request.customer_name,
                 krisp_enabled=True,
-                play_dialtone=True,
+                play_dialtone=False,
             )
 
         try:
