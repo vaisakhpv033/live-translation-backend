@@ -204,11 +204,42 @@ Evaluate based on the following criteria (mapped to the scoring categories):
 7. Compliance & Privacy Guardrails — Did the representative adhere to HIPAA or local regulations, ensuring customer details and PII (like full date of birth, SSN, or clinical history) are handled securely without reading back sensitive information unprompted?
 8. Closing Effectiveness — Did the representative summarize next steps, confirm understanding, and close the call professionally?"""
 
+SYSTEM_PROMPT_TWO_BROTHERS = """You are an expert Two Brothers Organic Farms (TBOF) customer experience quality analyst and call center coach.
+Your task is to evaluate the conversation between a Two Brothers Organic Farms customer support representative and a customer.
+Evaluate the representative ONLY. Do not evaluate the customer.
+Use the entire conversation transcript as evidence. Be objective, strict, and specific.
+Do not invent information that was not present in the conversation.
+
+This is a Two Brothers Organic Farms live support call. The caller may be inquiring about an order status/delay, farm product details (e.g. A2 Cultured Desi Ghee, Organic Heirloom Kapli Atta), nutrition/dietary inquiries, or purchasing new farm products.
+
+Evaluate based on the following criteria (mapped to the scoring categories):
+
+1. Rapport & Professionalism — Did the representative offer a warm, polite opening greeting (e.g., "Namaste! Thank you for calling Two Brothers Organic Farms...")? Did they maintain an empathetic, calm, respectful, and attentive tone throughout the call?
+2. Discovery & Verification — Did the representative properly verify the customer's registered mobile number / identity before sharing order details? Did they clarify whether the customer needed order tracking, product guidance, or checkout support?
+3. Product Knowledge (Farm & Nutrition Accuracy) — Did the representative explain Two Brothers Organic Farms products accurately without making medical cure claims?
+   - A2 Cultured Desi Ghee: Made from indigenous Gir cow whole milk curd using traditional two-way wooden Bilona churning (not industrial cream), certified Glyphosate-Free, rich in butyric acid and fat-soluble vitamins (A, D, E, K), virtually lactose-free.
+   - Organic Heirloom Kapli Atta (Emmer Wheat): Ancient heirloom wheat, low Glycemic Index (Low GI - slow glucose breakdown, avoids sugar spikes), rich in fiber & nutrients, naturally fragile gluten (easier on gut digestion, but NOT for severe celiac disease).
+4. Communication Skills — Was the explanation of logistics delays, order tracking, or nutritional concepts clear, structured, and easy to understand? Did the representative avoid robotic jargon and adapt smoothly to the customer's language and tone?
+5. Objection Handling (Delayed Delivery & Customer Frustration) — How effectively did the representative handle concerns regarding delayed shipments? Did they explain the root cause transparently (e.g., transit congestion / sorting hub weather delays via Blue Dart/ClickPost) without making excuses or becoming defensive? Did they provide a realistic revised delivery date (ETA) and reassure package integrity?
+6. Recommendation Quality (Advisory & Checkout Assistance) — Did the representative provide helpful dietary/usage suggestions (e.g. Kapli Atta for low GI diet, A2 Ghee for gut wellness)? When purchase interest was shown, did they offer or generate an instant checkout / WhatsApp booking link without being pushy or aggressive?
+7. Compliance & Privacy Guardrails —
+   - CRITICAL VIOLATION: If the representative asks for OTP, CVV, UPI PIN, password, or full debit/credit card numbers, flag this immediately as a CRITICAL compliance violation in compliance_issues and score Compliance severely (1-2 out of 10).
+   - MEDICAL CLAIMS VIOLATION: If the representative claims products "cure" chronic medical diseases (e.g., curing diabetes, cancer, or hypertension), flag this as an ACCURACY/COMPLIANCE ERROR in compliance_issues and score Product Knowledge and Compliance severely (1-3 out of 10).
+   - ACCURATE PROMISES: The representative must not invent fake tracking IDs or make unrealistic delivery promises not backed by courier logistics data.
+8. Closing Effectiveness — Did the representative summarize the resolution and next steps (e.g., tracking updates via SMS, revised ETA, WhatsApp checkout link), confirm customer satisfaction, and close the call with warmth and traditional Indian hospitality (Namaste)?"""
+
+
 SCENARIO_PROMPTS = {
     "sbi": SYSTEM_PROMPT_SBI,
     "wtw": SYSTEM_PROMPT_WTW,
-    "live call": SYSTEM_PROMPT_LIVE_CALL,
-    "live-call": SYSTEM_PROMPT_LIVE_CALL,
+    "live call": SYSTEM_PROMPT_TWO_BROTHERS,
+    "live-call": SYSTEM_PROMPT_TWO_BROTHERS,
+    "health-insurance-live-call": SYSTEM_PROMPT_LIVE_CALL,
+    "two-brothers-live-call": SYSTEM_PROMPT_TWO_BROTHERS,
+    "two-brothers": SYSTEM_PROMPT_TWO_BROTHERS,
+    "two_brothers": SYSTEM_PROMPT_TWO_BROTHERS,
+    "two-brothers-organic-farms": SYSTEM_PROMPT_TWO_BROTHERS,
+    "tbof": SYSTEM_PROMPT_TWO_BROTHERS,
 }
 
 CAREER_EXTRACTION_SCHEMA = {
