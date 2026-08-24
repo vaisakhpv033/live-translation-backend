@@ -232,8 +232,8 @@ Evaluate based on the following criteria (mapped to the scoring categories):
 SCENARIO_PROMPTS = {
     "sbi": SYSTEM_PROMPT_SBI,
     "wtw": SYSTEM_PROMPT_WTW,
-    "live call": SYSTEM_PROMPT_TWO_BROTHERS,
-    "live-call": SYSTEM_PROMPT_TWO_BROTHERS,
+    "live call": SYSTEM_PROMPT_LIVE_CALL,
+    "live-call": SYSTEM_PROMPT_LIVE_CALL,
     "health-insurance-live-call": SYSTEM_PROMPT_LIVE_CALL,
     "two-brothers-live-call": SYSTEM_PROMPT_TWO_BROTHERS,
     "two-brothers": SYSTEM_PROMPT_TWO_BROTHERS,
