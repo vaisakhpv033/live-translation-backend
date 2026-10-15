@@ -17,7 +17,7 @@ class ReportCreate(BaseModel):
     customer_name: Optional[str] = Field(None, description="Customer name")
     agent_type: Optional[str] = Field(None, description="Agent type identifier")
     sales_rep: Optional[str] = Field(None, description="Sales representative name")
-    scenario: Optional[str] = Field(None, description="Evaluation scenario (sbi, wtw)")
+    scenario: Optional[str] = Field(None, description="Evaluation scenario (e.g. sbi, wtw, motor-claim, two-brothers)")
 
 
 class ReportSummary(BaseModel):

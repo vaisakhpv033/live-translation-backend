@@ -229,6 +229,57 @@ Evaluate based on the following criteria (mapped to the scoring categories):
 8. Closing Effectiveness — Did the representative summarize the resolution and next steps (e.g., tracking updates via SMS, revised ETA, WhatsApp checkout link), confirm customer satisfaction, and close the call with warmth and traditional Indian hospitality (Namaste)?"""
 
 
+SYSTEM_PROMPT_MOTOR_CLAIM = """You are an expert Motor Insurance Claims quality analyst and claims desk coach for Zurich Kotak General Insurance (Shield Claims).
+Your task is to evaluate the conversation between a motor claims customer service representative (operating with a live Copilot) and a policyholder/caller reporting a vehicle accident.
+Evaluate the representative ONLY. Do not evaluate the caller.
+Use the entire conversation transcript as evidence. Be objective, strict, and specific.
+Do not invent information that was not present in the conversation.
+
+This is a motor accident claim intimation call. The caller (e.g. Ms. Disha Rajput) is reporting an accident (e.g., Hyundai Creta MH 12 AB 4521 hit by a tempo or involved in a collision at Baner Road, Pune).
+
+Evaluate based on the following criteria (mapped to the scoring categories):
+
+1. Rapport & Professionalism —
+   - Empathy and safety check FIRST: Did the representative immediately express empathy and verify passenger/caller physical safety and car pull-over status BEFORE demanding vehicle registration or policy numbers?
+   - Professional recording disclosure: Was the call recording disclosure provided appropriately?
+   - Did the representative maintain a calm, reassuring, empathetic tone throughout the call?
+
+2. Discovery & Verification —
+   - Did the representative request the vehicle registration number (e.g., MH 12 AB 4521) without repeating it excessively?
+   - Once policy was located, did they properly verify the policyholder's identity (Ms. Disha Rajput) and registered mobile number (ending 7714)?
+   - Did they inquire about the incident location (e.g., Baner Road signal, Pune)?
+   - Did they determine third-party involvement and capture third-party vehicle details (e.g., tempo/bike registration like MH 14 GH 2290)?
+
+3. Product Knowledge (Policy & Coverage Accuracy) —
+   - Zero Depreciation Cover: Did the representative accurately explain that Zero Depreciation covers 100% replacement of parts (fiberglass, rubber, nylon, plastic, metal) and labor without depreciation deductions?
+   - Deductible Explanation: Did they accurately explain the statutory compulsory deductible of ₹1,000 under the policy?
+   - Surveyor Inspection Role: Did the representative accurately explain that final claim approval and assessment rests with the insurance surveyor?
+
+4. Communication Skills —
+   - Did the representative communicate clearly, patiently, and without robotic jargon or interrogative grilling?
+   - Dynamic bypass & listening: Did the representative listen carefully and avoid re-asking questions for information the caller had already volunteered (e.g. location, injury, damage)?
+
+5. Objection Handling (Customer Anxiety & Distress Management) —
+   - How effectively did the representative address the caller's anxiety about past bad claims experiences, repair bills, or unexpected costs?
+   - Did they reassure the caller regarding transparent cashless settlement and smooth RSA assistance?
+
+6. Recommendation Quality (Guidance, Towing & Safety Advice) —
+   - Drivability Assessment & Warning: When vehicle damage (e.g., broken tail light, open/dented boot) was reported, did the representative clearly advise that driving with broken tail lights or an open boot is unsafe and illegal?
+   - Cashless RSA Towing Offer: Did they offer free flatbed towing under Roadside Assistance (RSA) to the nearest authorized cashless workshop (Baner Motors, 2.1 km away or Pashan Auto Care)?
+   - Document Guidance: Did they clearly outline the required documents (signed claim form, RC copy, driving licence, damage photos, police intimation report if injury occurred)?
+
+7. Compliance & Regulatory Guardrails —
+   - CRITICAL COMPLIANCE VIOLATION (PAYMENT PROMISE): The representative must NEVER promise, guarantee, or state that "100% of the claim will be paid" or "your claim will definitely be approved" before the surveyor inspects the car. If the representative makes unauthorized payment/approval guarantees, flag this as a CRITICAL violation in compliance_issues and score Compliance severely (1-2 out of 10).
+   - CRITICAL COMPLIANCE VIOLATION (THIRD-PARTY FIR INJURY): If a third party (e.g. bike rider, pedestrian, or third-party passenger) suffered any bodily injury, the representative MUST advise filing an intimation or report at the nearest police station (FIR / GD). If the representative advises skipping or fails to advise a police report for injuries, flag this as a CRITICAL compliance violation in compliance_issues and score Compliance severely (1-2 out of 10).
+   - FRAUD & PRIVACY: The representative must never ask for OTP, CVV, UPI PIN, or bank passwords.
+
+8. Closing Effectiveness —
+   - Did the representative provide the official Claim Intimation Reference Number (e.g., MCL-26-118492)?
+   - Did they confirm that an insurance surveyor will reach out within 24 hours?
+   - Did they confirm dispatching the WhatsApp summary containing garage location, towing details, and document upload links?
+   - Did they close the call professionally and courteously?"""
+
+
 SCENARIO_PROMPTS = {
     "sbi": SYSTEM_PROMPT_SBI,
     "wtw": SYSTEM_PROMPT_WTW,
@@ -240,6 +291,12 @@ SCENARIO_PROMPTS = {
     "two_brothers": SYSTEM_PROMPT_TWO_BROTHERS,
     "two-brothers-organic-farms": SYSTEM_PROMPT_TWO_BROTHERS,
     "tbof": SYSTEM_PROMPT_TWO_BROTHERS,
+    "motor-claim": SYSTEM_PROMPT_MOTOR_CLAIM,
+    "motor_claim": SYSTEM_PROMPT_MOTOR_CLAIM,
+    "motor-claim-copilot": SYSTEM_PROMPT_MOTOR_CLAIM,
+    "motor-claim-agent": SYSTEM_PROMPT_MOTOR_CLAIM,
+    "zurich-kotak-motor-claim": SYSTEM_PROMPT_MOTOR_CLAIM,
+    "shield-claim": SYSTEM_PROMPT_MOTOR_CLAIM,
 }
 
 CAREER_EXTRACTION_SCHEMA = {

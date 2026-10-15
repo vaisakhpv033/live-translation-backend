@@ -17,7 +17,7 @@ settings = get_settings()
 
 AGENT_NAME = "naaptol-order-confirmation"
 AGENT_READINESS_POLL_INTERVAL_S = 0.5
-AGENT_READINESS_TIMEOUT_S = 30.0
+AGENT_READINESS_TIMEOUT_S = 10.0
 
 
 class IOrderConfirmationService(ABC):
