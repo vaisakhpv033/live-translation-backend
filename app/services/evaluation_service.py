@@ -120,6 +120,25 @@ GEMINI_QA_REPORT_SCHEMA = {
         "readiness_reasoning": {
             "type": "STRING",
             "description": "Detailed reasoning for the readiness assessment"
+        },
+        "claim_summary": {
+            "type": "OBJECT",
+            "description": "Structured 13-field claim intake summary for motor claim calls. If any field is not available, return 'N/A'.",
+            "properties": {
+                "claim_number": {"type": "STRING", "description": "Official claim number e.g. MCL-26-118492 or 'N/A'"},
+                "policy": {"type": "STRING", "description": "Policy number and identity verification status e.g. 'SGI/MOT/2026/448127, identity verified' or 'N/A'"},
+                "insured_and_vehicle": {"type": "STRING", "description": "Insured person and vehicle model/reg e.g. 'Ramesh Patil; Hyundai Creta, MH 12 AB 4521' or 'N/A'"},
+                "when_and_where": {"type": "STRING", "description": "Incident timing and location from conversation e.g. 'About 20 minutes before the call, Baner Road signal, Pune' or 'N/A'"},
+                "what_happened": {"type": "STRING", "description": "Collision summary from conversation e.g. 'Hit from behind by a tempo while stopped at a signal' or 'N/A'"},
+                "damage_reported": {"type": "STRING", "description": "Vehicle damages reported from conversation e.g. 'Rear bumper, tail light, boot lid' or 'N/A'"},
+                "third_party": {"type": "STRING", "description": "Third party vehicle and injury details from conversation e.g. 'Tempo MH 14 GH 2290; a bike rider with a minor hand injury' or 'N/A'"},
+                "police_report": {"type": "STRING", "description": "Police report advice status from conversation e.g. 'Advised, as a third party was injured' or 'N/A'"},
+                "garage_and_tow": {"type": "STRING", "description": "Chosen garage and towing from conversation e.g. 'Baner Motors (cashless), towed under roadside assistance' or 'N/A'"},
+                "documents_requested": {"type": "STRING", "description": "Documents requested from customer e.g. 'Claim form, RC, driving licence, police report, photos' or 'N/A'"},
+                "next_step": {"type": "STRING", "description": "Next steps promised e.g. 'Surveyor to call within 24 hours; WhatsApp summary sent' or 'N/A'"},
+                "compliance": {"type": "STRING", "description": "Compliance status synthesized from telemetry and dialogue e.g. 'Recording disclosed; two alerts raised and corrected on the call' or 'N/A'"},
+                "customer_mood": {"type": "STRING", "description": "Customer mood trajectory synthesized from telemetry and dialogue e.g. 'Anxious mid-call, positive at the close' or 'N/A'"}
+            }
         }
     },
     "required": [
@@ -277,7 +296,25 @@ Evaluate based on the following criteria (mapped to the scoring categories):
    - Did the representative provide the official Claim Intimation Reference Number (e.g., MCL-26-118492)?
    - Did they confirm that an insurance surveyor will reach out within 24 hours?
    - Did they confirm dispatching the WhatsApp summary containing garage location, towing details, and document upload links?
-   - Did they close the call professionally and courteously?"""
+   - Did they close the call professionally and courteously?
+
+CLAIM SUMMARY EXTRACTION DIRECTIVE:
+You must also synthesize a structured "claim_summary" object containing the following 13 fields:
+1. claim_number: Official claim number (from telemetry or dialogue e.g. "MCL-26-118492"). If not available, "N/A".
+2. policy: Policy number and identity verification status (e.g. "SGI/MOT/2026/448127, identity verified"). If not available, "N/A".
+3. insured_and_vehicle: Policyholder name and insured vehicle model & registration (e.g. "Ramesh Patil; Hyundai Creta, MH 12 AB 4521" or from telemetry/dialogue). If not available, "N/A".
+4. when_and_where: Incident time and location from conversation (e.g. "About 20 minutes before the call, Baner Road signal, Pune"). Must be extracted from dialogue. If not available, "N/A".
+5. what_happened: Brief description of collision from conversation (e.g. "Hit from behind by a tempo while stopped at a signal"). Must be extracted from dialogue. If not available, "N/A".
+6. damage_reported: Vehicle damages reported by caller from conversation (e.g. "Rear bumper, tail light, boot lid"). If not available, "N/A".
+7. third_party: Details of third-party vehicle and any injury mentioned from conversation (e.g. "Tempo MH 14 GH 2290; a bike rider with a minor hand injury"). If no third party, "None" or "N/A".
+8. police_report: Police report/FIR status and advice from conversation (e.g. "Advised, as a third party was injured" or "Not required for single vehicle"). If not available, "N/A".
+9. garage_and_tow: Chosen network garage and towing arrangement from conversation (e.g. "Baner Motors (cashless), towed under roadside assistance"). Must be extracted from dialogue. If not available, "N/A".
+10. documents_requested: Checklist of documents requested from the customer from conversation (e.g. "Claim form, RC, driving licence, police report, photos"). If not available, "N/A".
+11. next_step: Next actions promised to the customer from conversation (e.g. "Surveyor to call within 24 hours; WhatsApp summary sent"). If not available, "N/A".
+12. compliance: Compliance disclosure and alerts summary synthesized from telemetry and dialogue (e.g. "Recording disclosed; two alerts raised and corrected on the call"). If not available, "N/A".
+13. customer_mood: Customer mood trajectory across call synthesized from telemetry and conversation (e.g. "Anxious mid-call, positive at the close"). If not available, "N/A".
+
+For any field where information is not present or cannot be determined from either the telemetry or transcript, return "N/A"."""
 
 
 SCENARIO_PROMPTS = {
@@ -534,15 +571,15 @@ class GeminiEvaluationService(IEvaluationService):
 
     @staticmethod
     def _format_transcript(chat_history_str: Optional[str]) -> str:
-        """Parses LiveKit chat history JSON into a readable transcript."""
+        """Parses LiveKit chat history JSON into a readable transcript, including telemetry if available."""
         if not chat_history_str:
             return "No transcript available."
         try:
             data = json.loads(chat_history_str)
-            items = data.get("items", [])
+            items = data.get("items", []) if isinstance(data, dict) else (data if isinstance(data, list) else [])
             lines = []
             for item in items:
-                if item.get("type") != "message":
+                if not isinstance(item, dict) or item.get("type") != "message":
                     continue
                 role = item.get("role")
                 if role == "system":
@@ -561,7 +598,64 @@ class GeminiEvaluationService(IEvaluationService):
                 speaker = "Ira Representative" if role == "user" else "AI Customer"
                 lines.append(f"{speaker}: {text.strip()}")
 
-            return "\n".join(lines)
+            transcript_text = "\n".join(lines)
+
+            # Extract runtime telemetry & copilot state if provided
+            if isinstance(data, dict) and data.get("claim_context"):
+                ctx = data.get("claim_context")
+                if isinstance(ctx, dict):
+                    telemetry_parts = ["\n[RUNTIME TELEMETRY & COPILOT STATE]"]
+                    if ctx.get("claim_number"):
+                        telemetry_parts.append(f"• Claim Number: {ctx.get('claim_number')}")
+                    if ctx.get("policy_number"):
+                        telemetry_parts.append(f"• Policy Number: {ctx.get('policy_number')} (Identity Verified)")
+                    if ctx.get("customer_name"):
+                        telemetry_parts.append(f"• Insured Customer Name: {ctx.get('customer_name')}")
+                    if ctx.get("vehicle"):
+                        telemetry_parts.append(f"• Vehicle Registration / Model: {ctx.get('vehicle')}")
+
+                    # Disclaimers
+                    disclaimers = ctx.get("disclaimers_checked")
+                    if isinstance(disclaimers, list) and any(disclaimers):
+                        telemetry_parts.append("• Recording Disclosure Spoken: Yes (verified by copilot)")
+                    elif disclaimers is not None:
+                        telemetry_parts.append("• Recording Disclosure Spoken: Not verified on interface")
+
+                    # Compliance Log
+                    comp_log = ctx.get("compliance_log")
+                    if isinstance(comp_log, list) and len(comp_log) > 0:
+                        total_alerts = len(comp_log)
+                        cleared_count = sum(1 for c in comp_log if isinstance(c, dict) and c.get("isClear"))
+                        uncorrected_count = total_alerts - cleared_count
+                        log_summaries = []
+                        for c in comp_log[:5]:
+                            if isinstance(c, dict):
+                                flag_name = c.get("ruleCode") or c.get("flag") or "Alert"
+                                is_clr = "Corrected on call" if c.get("isClear") else "Uncorrected"
+                                log_summaries.append(f"{flag_name} ({is_clr})")
+                        comp_desc = f"{total_alerts} alert(s) raised, {cleared_count} corrected on call"
+                        if uncorrected_count > 0:
+                            comp_desc += f", {uncorrected_count} active/uncorrected"
+                        if log_summaries:
+                            comp_desc += f" -> [{', '.join(log_summaries)}]"
+                        telemetry_parts.append(f"• Compliance Alerts Log: {comp_desc}")
+
+                    # Mood History
+                    mood_history = ctx.get("mood_history")
+                    if isinstance(mood_history, list) and len(mood_history) > 0:
+                        mood_steps = []
+                        for m in reversed(mood_history):
+                            if isinstance(m, dict) and m.get("mood"):
+                                mood_steps.append(m.get("mood"))
+                            elif isinstance(m, str):
+                                mood_steps.append(m)
+                        if mood_steps:
+                            telemetry_parts.append(f"• Customer Mood Progression: {' -> '.join(mood_steps)}")
+
+                    telemetry_parts.append("[END OF RUNTIME TELEMETRY]\n")
+                    return "\n".join(telemetry_parts) + "\n" + transcript_text
+
+            return transcript_text
         except Exception as e:
             return f"Error parsing transcript: {e}"
 
