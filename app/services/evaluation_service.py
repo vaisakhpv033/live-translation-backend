@@ -138,7 +138,22 @@ GEMINI_QA_REPORT_SCHEMA = {
                 "next_step": {"type": "STRING", "description": "Next steps promised e.g. 'Surveyor to call within 24 hours; WhatsApp summary sent' or 'N/A'"},
                 "compliance": {"type": "STRING", "description": "Compliance status synthesized from telemetry and dialogue e.g. 'Recording disclosed; two alerts raised and corrected on the call' or 'N/A'"},
                 "customer_mood": {"type": "STRING", "description": "Customer mood trajectory synthesized from telemetry and dialogue e.g. 'Anxious mid-call, positive at the close' or 'N/A'"}
-            }
+            },
+            "required": [
+                "claim_number",
+                "policy",
+                "insured_and_vehicle",
+                "when_and_where",
+                "what_happened",
+                "damage_reported",
+                "third_party",
+                "police_report",
+                "garage_and_tow",
+                "documents_requested",
+                "next_step",
+                "compliance",
+                "customer_mood"
+            ]
         }
     },
     "required": [
@@ -158,7 +173,8 @@ GEMINI_QA_REPORT_SCHEMA = {
         "compliance_issues",
         "coaching_recommendations",
         "readiness_assessment",
-        "readiness_reasoning"
+        "readiness_reasoning",
+        "claim_summary"
     ]
 }
 
