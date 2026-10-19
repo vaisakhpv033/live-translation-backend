@@ -112,3 +112,18 @@ def get_career_record_service(
     evaluation_service = GeminiEvaluationService()
     return CareerRecordService(repository, evaluation_service)
 
+
+# ──────────────────────────────────────────────────────────────
+#  AutoCoach Dependencies (uses the STS LiveKit client)
+# ──────────────────────────────────────────────────────────────
+
+def get_autocoach_service(
+    lk_client: api.LiveKitAPI = Depends(get_sts_livekit_api_client)
+):
+    """
+    FastAPI dependency that returns an IAutoCoachService backed by the STS LiveKit client.
+    """
+    from app.services.autocoach_service import LiveKitAutoCoachService
+    return LiveKitAutoCoachService(lk_client)
+
+
