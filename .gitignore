@@ -8,3 +8,4 @@ __pycache__
 .env.*
 .dockerignore
 uv.lock
+.pytest_cache/
