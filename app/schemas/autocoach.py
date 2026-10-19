@@ -26,7 +26,11 @@ class AutoCoachSessionCreate(BaseModel):
     )
     difficulty: Optional[str] = Field(
         default="medium",
-        description="Simulation objection severity: 'easy', 'medium', or 'hard'"
+        description="Simulation objection severity: 'easy', 'medium', 'hard', or 'nightmare'"
+    )
+    gender: Optional[str] = Field(
+        default=None,
+        description="Patient caller gender: 'male' or 'female' (used to resolve matching natural Gemini voice)"
     )
     voice: Optional[str] = Field(
         default=None,

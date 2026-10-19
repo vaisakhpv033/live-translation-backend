@@ -146,6 +146,8 @@ class LiveKitAutoCoachService(IAutoCoachService):
             "trainee_id": trainee_id,
             "trainee_name": trainee_name,
         }
+        if session_in.gender:
+            metadata["gender"] = session_in.gender
         if session_in.voice:
             metadata["voice"] = session_in.voice
         if session_in.custom_instructions:
