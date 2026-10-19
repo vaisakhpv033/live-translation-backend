@@ -127,7 +127,7 @@ GEMINI_QA_REPORT_SCHEMA = {
             "properties": {
                 "claim_number": {"type": "STRING", "description": "Official claim number e.g. MCL-26-118492 or 'N/A'"},
                 "policy": {"type": "STRING", "description": "Policy number and identity verification status e.g. 'SGI/MOT/2026/448127, identity verified' or 'N/A'"},
-                "insured_and_vehicle": {"type": "STRING", "description": "Insured person and vehicle model/reg e.g. 'Ramesh Patil; Hyundai Creta, MH 12 AB 4521' or 'N/A'"},
+                "insured_and_vehicle": {"type": "STRING", "description": "Insured person and vehicle model/reg e.g. 'Suresh Kumar; Hyundai Creta, MH 12 AB 4521' or 'N/A'"},
                 "when_and_where": {"type": "STRING", "description": "Incident timing and location from conversation e.g. 'About 20 minutes before the call, Baner Road signal, Pune' or 'N/A'"},
                 "what_happened": {"type": "STRING", "description": "Collision summary from conversation e.g. 'Hit from behind by a tempo while stopped at a signal' or 'N/A'"},
                 "damage_reported": {"type": "STRING", "description": "Vehicle damages reported from conversation e.g. 'Rear bumper, tail light, boot lid' or 'N/A'"},
@@ -175,6 +175,177 @@ GEMINI_QA_REPORT_SCHEMA = {
         "readiness_assessment",
         "readiness_reasoning",
         "claim_summary"
+    ]
+}
+
+# ──────────────────────────────────────────────────────────────
+#  Gemini Dental QA Report Card Schema (AutoCoach SOP Adherence)
+# ──────────────────────────────────────────────────────────────
+
+GEMINI_DENTAL_QA_REPORT_SCHEMA = {
+    "type": "OBJECT",
+    "properties": {
+        "scenario_practiced": {
+            "type": "STRING",
+            "description": "Brief summary of patient profile, dental concerns, and practice context"
+        },
+        "overall_score": {
+            "type": "INTEGER",
+            "description": "Overall score from 1 to 100 based on rubric category weights"
+        },
+        "rapport": {
+            "type": "OBJECT",
+            "properties": {
+                "score": {"type": "INTEGER", "description": "Score from 1 to 10"},
+                "reason": {"type": "STRING", "description": "Short explanation or evidence for the score"}
+            },
+            "required": ["score", "reason"]
+        },
+        "discovery": {
+            "type": "OBJECT",
+            "properties": {
+                "score": {"type": "INTEGER", "description": "Score from 1 to 10"},
+                "reason": {"type": "STRING", "description": "Short explanation or evidence for the score"}
+            },
+            "required": ["score", "reason"]
+        },
+        "sop_adherence": {
+            "type": "OBJECT",
+            "properties": {
+                "score": {"type": "INTEGER", "description": "Score from 1 to 10"},
+                "reason": {"type": "STRING", "description": "Evaluation of adherence to standard dental front-desk objection verbiages and protocols"}
+            },
+            "required": ["score", "reason"]
+        },
+        "communication": {
+            "type": "OBJECT",
+            "properties": {
+                "score": {"type": "INTEGER", "description": "Score from 1 to 10"},
+                "reason": {"type": "STRING", "description": "Short explanation or evidence for the score"}
+            },
+            "required": ["score", "reason"]
+        },
+        "objection_handling": {
+            "type": "OBJECT",
+            "properties": {
+                "score": {"type": "INTEGER", "description": "Score from 1 to 10"},
+                "reason": {"type": "STRING", "description": "Short explanation or evidence for the score"}
+            },
+            "required": ["score", "reason"]
+        },
+        "recommendation_quality": {
+            "type": "OBJECT",
+            "properties": {
+                "score": {"type": "INTEGER", "description": "Score from 1 to 10"},
+                "reason": {"type": "STRING", "description": "Short explanation or evidence for the score"}
+            },
+            "required": ["score", "reason"]
+        },
+        "compliance": {
+            "type": "OBJECT",
+            "properties": {
+                "score": {"type": "INTEGER", "description": "Score from 1 to 10"},
+                "reason": {"type": "STRING", "description": "Short explanation or evidence for the score"}
+            },
+            "required": ["score", "reason"]
+        },
+        "closing": {
+            "type": "OBJECT",
+            "properties": {
+                "score": {"type": "INTEGER", "description": "Score from 1 to 10"},
+                "reason": {"type": "STRING", "description": "Short explanation or evidence for the score"}
+            },
+            "required": ["score", "reason"]
+        },
+        "positives": {
+            "type": "ARRAY",
+            "items": {"type": "STRING"},
+            "description": "List of strongest behaviors observed (empty list if none)"
+        },
+        "improvement_areas": {
+            "type": "ARRAY",
+            "items": {"type": "STRING"},
+            "description": "List of the most important weaknesses/improvements"
+        },
+        "missed_opportunities": {
+            "type": "ARRAY",
+            "items": {"type": "STRING"},
+            "description": "List of important questions or verbiages that should have been used"
+        },
+        "compliance_issues": {
+            "type": "ARRAY",
+            "items": {"type": "STRING"},
+            "description": "List of compliance concerns/violations (empty list if none)"
+        },
+        "coaching_recommendations": {
+            "type": "ARRAY",
+            "items": {"type": "STRING"},
+            "description": "3 specific coaching recommendations"
+        },
+        "readiness_assessment": {
+            "type": "STRING",
+            "description": "Readiness assessment (must be one of: 'Not Ready', 'Needs Significant Coaching', 'Developing', 'Ready With Supervision', 'Production Ready')"
+        },
+        "readiness_reasoning": {
+            "type": "STRING",
+            "description": "Detailed reasoning for the readiness assessment"
+        },
+        "sop_adherence_summary": {
+            "type": "OBJECT",
+            "description": "Structured evaluation of the trainee's adherence to official Dental Front Desk SOPs and objection verbiages. Use 'N/A' if the scenario was not encountered.",
+            "properties": {
+                "system_down_handling": {"type": "STRING", "description": "Did the trainee buy time politely and offer tentative date + callback if system froze? e.g. 'Adhered', 'Violated: hung up', or 'N/A'"},
+                "spanish_patient_handling": {"type": "STRING", "description": "Did trainee apologize politely in Spanish/English and offer transfer or callback with Spanish speaker? e.g. 'Adhered', 'Violated', or 'N/A'"},
+                "doctor_request_handling": {"type": "STRING", "description": "Did trainee avoid putting caller on hold to search for doctor, state dr is with patient, and offer to take message/callback? e.g. 'Adhered', 'Violated: put on hold', or 'N/A'"},
+                "note_taking_pause_handling": {"type": "STRING", "description": "Did trainee politely request a moment to note details for the clinical team to avoid awkward silence? e.g. 'Adhered', 'Violated: silence', or 'N/A'"},
+                "patient_moving_handling": {"type": "STRING", "description": "Did trainee warmly express regret, wish luck on move, and leave door open to return? e.g. 'Adhered', 'Violated', or 'N/A'"},
+                "billing_dept_handling": {"type": "STRING", "description": "Did trainee take information and promise billing callback within 2 business days (or escalate)? e.g. 'Adhered', 'Violated', or 'N/A'"},
+                "remote_inquiry_handling": {"type": "STRING", "description": "Did trainee explain remote role positively as freeing in-office team to focus on patient care? e.g. 'Adhered', 'Violated: evasive', or 'N/A'"},
+                "repeat_offender_handling": {"type": "STRING", "description": "Did trainee state schedule is booked out and advise calling day-of for same-day openings? e.g. 'Adhered', 'Violated', or 'N/A'"},
+                "archived_inactive_patient_handling": {"type": "STRING", "description": "Did trainee check for emergency, and if general exam use booked-out / insurance referral verbiage? e.g. 'Adhered', 'Violated', or 'N/A'"},
+                "balance_due_handling": {"type": "STRING", "description": "Did trainee courteously inform and collect pending balance before booking per protocol? e.g. 'Adhered', 'Violated', or 'N/A'"},
+                "xray_transfer_handling": {"type": "STRING", "description": "Did trainee explain 6-month validity rule, 48-hr email requirement, and condition check? e.g. 'Adhered', 'Violated', or 'N/A'"},
+                "first_visit_explanation": {"type": "STRING", "description": "Did trainee explain exam + X-ray workflow and build warmth about the doctor/practice? e.g. 'Adhered', 'Violated', or 'N/A'"},
+                "urgent_emergency_triage": {"type": "STRING", "description": "Did trainee assess urgency (pain/swelling/trauma) and offer same-day priority slot if emergency? e.g. 'Adhered', 'Violated', or 'N/A'"},
+                "overall_sop_verdict": {"type": "STRING", "description": "'Fully Compliant', 'Partially Compliant', or 'Non-Compliant' with dental front desk SOPs"}
+            },
+            "required": [
+                "system_down_handling",
+                "spanish_patient_handling",
+                "doctor_request_handling",
+                "note_taking_pause_handling",
+                "patient_moving_handling",
+                "billing_dept_handling",
+                "remote_inquiry_handling",
+                "repeat_offender_handling",
+                "archived_inactive_patient_handling",
+                "balance_due_handling",
+                "xray_transfer_handling",
+                "first_visit_explanation",
+                "urgent_emergency_triage",
+                "overall_sop_verdict"
+            ]
+        }
+    },
+    "required": [
+        "scenario_practiced",
+        "overall_score",
+        "rapport",
+        "discovery",
+        "sop_adherence",
+        "communication",
+        "objection_handling",
+        "recommendation_quality",
+        "compliance",
+        "closing",
+        "positives",
+        "improvement_areas",
+        "missed_opportunities",
+        "compliance_issues",
+        "coaching_recommendations",
+        "readiness_assessment",
+        "readiness_reasoning",
+        "sop_adherence_summary"
     ]
 }
 
@@ -270,7 +441,7 @@ Evaluate the representative ONLY. Do not evaluate the caller.
 Use the entire conversation transcript as evidence. Be objective, strict, and specific.
 Do not invent information that was not present in the conversation.
 
-This is a motor accident claim intimation call. The caller (e.g. Ms. Disha Rajput) is reporting an accident (e.g., Hyundai Creta MH 12 AB 4521 hit by a tempo or involved in a collision at Baner Road, Pune).
+This is a motor accident claim intimation call. The caller (e.g. Mr. Suresh Kumar) is reporting an accident (e.g., Hyundai Creta MH 12 AB 4521 hit by a tempo or involved in a collision at Baner Road, Pune).
 
 Evaluate based on the following criteria (mapped to the scoring categories):
 
@@ -281,7 +452,7 @@ Evaluate based on the following criteria (mapped to the scoring categories):
 
 2. Discovery & Verification —
    - Did the representative request the vehicle registration number (e.g., MH 12 AB 4521) without repeating it excessively?
-   - Once policy was located, did they properly verify the policyholder's identity (Ms. Disha Rajput) and registered mobile number (ending 7714)?
+   - Once policy was located, did they properly verify the policyholder's identity (Mr. Suresh Kumar) and registered mobile number (ending 7714)?
    - Did they inquire about the incident location (e.g., Baner Road signal, Pune)?
    - Did they determine third-party involvement and capture third-party vehicle details (e.g., tempo/bike registration like MH 14 GH 2290)?
 
@@ -318,7 +489,7 @@ CLAIM SUMMARY EXTRACTION DIRECTIVE:
 You must also synthesize a structured "claim_summary" object containing the following 13 fields:
 1. claim_number: Official claim number (from telemetry or dialogue e.g. "MCL-26-118492"). If not available, "N/A".
 2. policy: Policy number and identity verification status (e.g. "SGI/MOT/2026/448127, identity verified"). If not available, "N/A".
-3. insured_and_vehicle: Policyholder name and insured vehicle model & registration (e.g. "Ramesh Patil; Hyundai Creta, MH 12 AB 4521" or from telemetry/dialogue). If not available, "N/A".
+3. insured_and_vehicle: Policyholder name and insured vehicle model & registration (e.g. "Suresh Kumar; Hyundai Creta, MH 12 AB 4521" or from telemetry/dialogue). If not available, "N/A".
 4. when_and_where: Incident time and location from conversation (e.g. "About 20 minutes before the call, Baner Road signal, Pune"). Must be extracted from dialogue. If not available, "N/A".
 5. what_happened: Brief description of collision from conversation (e.g. "Hit from behind by a tempo while stopped at a signal"). Must be extracted from dialogue. If not available, "N/A".
 6. damage_reported: Vehicle damages reported by caller from conversation (e.g. "Rear bumper, tail light, boot lid"). If not available, "N/A".
@@ -331,6 +502,88 @@ You must also synthesize a structured "claim_summary" object containing the foll
 13. customer_mood: Customer mood trajectory across call synthesized from telemetry and conversation (e.g. "Anxious mid-call, positive at the close"). If not available, "N/A".
 
 For any field where information is not present or cannot be determined from either the telemetry or transcript, return "N/A"."""
+
+
+SYSTEM_PROMPT_DENTAL_COACH = """You are an expert Dental Front Desk Quality Analyst, Patient Experience Trainer, and Call Center Coach.
+Your task is to evaluate the conversation between a Dental Front Desk Representative / Trainee and a dental patient (caller).
+Evaluate the Front Desk Trainee ONLY. Do NOT evaluate the patient.
+Use the entire conversation transcript as evidence. Be objective, thorough, and specific with direct quotes.
+Do not invent information that was not present in the conversation.
+
+EVALUATION CRITERIA (Scored 1 to 10 with direct evidence):
+1. Rapport & Professionalism — Warm greeting, empathy, identifying self and dental practice, treating patient like family.
+2. Discovery & Needs Analysis — Asking diagnostic questions regarding patient's dental pain, symptoms, dental history, and urgency.
+3. SOP Adherence — Strict adherence to dental front desk verbiages and protocols (System down, Spanish patient, Doctor request, Note pauses, Balance collection, 6-month X-rays, etc.).
+4. Communication Skills — Clear, empathetic, jargon-free explanations, conversational pacing, polite articulation.
+5. Objection Handling — Managing pushback on pricing, past-due balances, doctor availability, appointment availability, or remote employee status without defensiveness.
+6. Recommendation Quality — Scheduling appropriate appointment slots, explaining comprehensive exam/X-ray procedures (or 3D cone beam scan for implants), prioritizing emergency triage if in pain.
+7. Compliance & Privacy Guardrails — HIPAA compliance, privacy, reminding patient that the doctor must examine before diagnosis, not making unauthorized medical diagnoses or guarantees.
+8. Closing Effectiveness — Reconfirming appointment date/time, doctor name, parking/arrival instructions, callback numbers, warm sign-off.
+
+DENTAL FRONT DESK SOP VERBIAGES AND OBJECTION HANDLING DIRECTIVES:
+Whenever an objection or specific scenario arises on the call, check whether the trainee adhered to the standard verbiages below:
+
+1. SYSTEM DOWN / FROZE:
+   - Protocol: Buy time while speaking to see if system recovers.
+   - If taking long: "Hey [pt name], sorry my system is down right now, I am just restarting my computer. In the meantime can I collect few details/information of you if you could wait for couple of minutes or shall I get back to you after a while once the system is up?"
+   - If completely frozen: "Hey [pt name], my system is just froze right now, I cannot confirm the appointment right now but I can give you tentative date and once the system is up I can call you back and confirm it."
+
+2. SPANISH PATIENT / CALLER:
+   - "I apologize, I dont speak spanish (lo siento muchisimo. Yo no, hablo espanol)"
+   - "Please hold the line, let me transfer your call (Espera un momento Déjeme transferir su llamada)"
+   - "Is it okay if I arrange a call back for you with our Spanish speaker? (Está bien si programo una llamada para usted con nuestro hablante de español?)"
+
+3. CALLER ASKING TO SPEAK TO A DOCTOR:
+   - CRITICAL: Never put caller on hold or try to find where the doctor is.
+   - Standard reply: "Hey, dr is busy with the pt is there anything I can help you with."
+   - If office closed: "Hey dr is not in today because we are closed, is there anything I can help you with."
+   - If caller insists: "Hey dr is busy with the pt if I can take the message for you, I will pass on the message to them and they call you back."
+   - If caller refuses details: "Hey the more details you can give me then the faster I can arrange a call back."
+
+4. NOTE-TAKING PAUSES (AVOIDING DEAD AIR):
+   - "Can you please give me a moment while I note down all that you are informing so that I can inform the team so that the team can be prepared to take best care for you."
+
+5. PATIENT MOVING AWAY FROM TOWN:
+   - "[pt name] we are sorry to hear that you are leaving us and we wish you best of luck on your move, if ever you are back and want to come for an appt we are here for you. we will be happy to have you."
+
+6. BILLING / OTHER DEPARTMENT INQUIRY:
+   - "Hey the person who handles the billing is not available at the moment. Let me take all your information and I will pass the information to them. And they will get back to you by [2 business days]. Is that ok?" (If urgent/escalated, notify office immediately).
+
+7. REMOTE / ANSWERING SERVICE INQUIRY:
+   - "Yes, I completely understand your curiosity. I work remotely to help the team with this part of the process and I work closely with them to collect all the necessary information so that when they have you in the office, they have more time to focus on taking best care of you."
+
+8. REPEATED APPOINTMENT OFFENDER (FREQUENT CANCELLATIONS / NO-SHOWS):
+   - "I apologize [pt name], but it looks like we are booked out. what i can advice you to do is on a day when you are available call the office to see if there is any same day appt available."
+
+9. ARCHIVED / DISMISSED PATIENT:
+   - If emergency: Schedule them.
+   - If general exam/cleaning: "I apologize [pt name], but it looks like we are booked out. what i can advice you to do is, on a day when you are available, call the office to see if there is any same day appt available." Or refer to insurance company for other offices.
+
+10. INACTIVE PATIENT:
+    - Search CRM/PMS for deactivation reason.
+    - If moved away and returned: Schedule 3-4 days out to give office time to review chart.
+    - If inactive due to big balance/rude: "Hey [Patient Name], I do not have an appt available right away. Let me take your information and give you a call back if anything opens up."
+
+11. PATIENT HAS A BALANCE DUE:
+    - If protocol is to collect before scheduling: "Hey [Patient Name], I’d be happy to schedule an appointment for you. I see you currently have a balance of [amount], and we do need to collect that before booking the appointment. How would you like to take care of it?"
+    - If patient refuses: "Hey, unfortunately I can not do that, the balance is pending from a while and we need to collect that payment before scheduling an appointment."
+
+12. RAPPORT BUILDING & 1ST APPOINTMENT WORKFLOW:
+    - "Hey [Patient Name], we can definitely help you with that, please know that your 1st appointment is going to be for an exam with the doctor, so that doctor can take a look at the affected area and see what it looks like. Then if needed the doctor will take X-ray to diagnose the affected area and then go over different options with you. Dr [Name] loves her patients and treats them like family."
+    - If implant consultation: Mention 3D cone beam scan (precision view of bone and nerve structure for comfortable, safe planning).
+
+13. EXISTING X-RAYS FROM OTHER OFFICE:
+    - Must be within the last 6 months.
+    - "If you’ve had X-rays taken within the last 6 months, you’re welcome to send them to us by email at least 48 hours before your appointment. Please make sure the images include the date they were taken. If the quality of the X-rays is good and, during your exam, the doctor sees that your oral condition hasn’t changed since then, we may not need to take new ones."
+
+14. EMERGENCY URGENCY TRIAGE:
+    - Determine if caller has acute pain, severe swelling, facial trauma, or bleeding. Offer same-day priority slot.
+
+15. PRICE SHOPPER / COST INQUIRY:
+    - Provide standard comprehensive exam & X-ray estimate politely, explain that the doctor must evaluate oral conditions in person before determining any treatment cost, and reassure that all costs and options are reviewed prior to starting any treatment.
+
+STRUCTURED SOP ADHERENCE SUMMARY:
+Synthesize an 'sop_adherence_summary' assessing each relevant SOP category. Use 'N/A' for any situation not occurring during this call."""
 
 
 SCENARIO_PROMPTS = {
@@ -350,6 +603,20 @@ SCENARIO_PROMPTS = {
     "motor-claim-agent": SYSTEM_PROMPT_MOTOR_CLAIM,
     "zurich-kotak-motor-claim": SYSTEM_PROMPT_MOTOR_CLAIM,
     "shield-claim": SYSTEM_PROMPT_MOTOR_CLAIM,
+    "dental_scheduling": SYSTEM_PROMPT_DENTAL_COACH,
+    "dental-scheduling": SYSTEM_PROMPT_DENTAL_COACH,
+    "dental_emergency": SYSTEM_PROMPT_DENTAL_COACH,
+    "dental-emergency": SYSTEM_PROMPT_DENTAL_COACH,
+    "dental_price_shopper": SYSTEM_PROMPT_DENTAL_COACH,
+    "dental-price-shopper": SYSTEM_PROMPT_DENTAL_COACH,
+    "dental_insurance_verification": SYSTEM_PROMPT_DENTAL_COACH,
+    "dental-insurance-verification": SYSTEM_PROMPT_DENTAL_COACH,
+    "dental_implant_consult": SYSTEM_PROMPT_DENTAL_COACH,
+    "dental-implant-consult": SYSTEM_PROMPT_DENTAL_COACH,
+    "dental_records_transfer": SYSTEM_PROMPT_DENTAL_COACH,
+    "dental-records-transfer": SYSTEM_PROMPT_DENTAL_COACH,
+    "autocoach_dental": SYSTEM_PROMPT_DENTAL_COACH,
+    "autocoach": SYSTEM_PROMPT_DENTAL_COACH,
 }
 
 CAREER_EXTRACTION_SCHEMA = {
@@ -454,9 +721,16 @@ class GeminiEvaluationService(IEvaluationService):
             logger.error("Gemini API key not configured.")
             return None, 0
 
-        transcript = self._format_transcript(chat_history_str)
+        is_dental = bool(scenario and (scenario.startswith("dental") or "autocoach" in scenario.lower()))
+        transcript = self._format_transcript(chat_history_str, is_dental=is_dental)
 
-        system_prompt = SCENARIO_PROMPTS.get(scenario or "sbi", SYSTEM_PROMPT_SBI)
+        if is_dental:
+            system_prompt = SCENARIO_PROMPTS.get(scenario, SYSTEM_PROMPT_DENTAL_COACH)
+            response_schema = GEMINI_DENTAL_QA_REPORT_SCHEMA
+        else:
+            system_prompt = SCENARIO_PROMPTS.get(scenario or "sbi", SYSTEM_PROMPT_SBI)
+            response_schema = GEMINI_QA_REPORT_SCHEMA
+
         prompt = f"{system_prompt}\n\nHere is the conversation transcript:\n{transcript}"
 
         url = f"https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:generateContent?key={api_key}"
@@ -470,7 +744,7 @@ class GeminiEvaluationService(IEvaluationService):
             ],
             "generationConfig": {
                 "responseMimeType": "application/json",
-                "responseSchema": GEMINI_QA_REPORT_SCHEMA
+                "responseSchema": response_schema
             }
         }
 
@@ -586,7 +860,7 @@ class GeminiEvaluationService(IEvaluationService):
         return None
 
     @staticmethod
-    def _format_transcript(chat_history_str: Optional[str]) -> str:
+    def _format_transcript(chat_history_str: Optional[str], is_dental: bool = False) -> str:
         """Parses LiveKit chat history JSON into a readable transcript, including telemetry if available."""
         if not chat_history_str:
             return "No transcript available."
@@ -595,7 +869,9 @@ class GeminiEvaluationService(IEvaluationService):
             items = data.get("items", []) if isinstance(data, dict) else (data if isinstance(data, list) else [])
             lines = []
             for item in items:
-                if not isinstance(item, dict) or item.get("type") != "message":
+                if not isinstance(item, dict):
+                    continue
+                if "type" in item and item.get("type") != "message":
                     continue
                 role = item.get("role")
                 if role == "system":
@@ -607,11 +883,16 @@ class GeminiEvaluationService(IEvaluationService):
                     text = " ".join([str(c) for c in content_list if isinstance(c, str)])
                 elif isinstance(content_list, str):
                     text = content_list
+                elif isinstance(item.get("text"), str):
+                    text = item.get("text", "")
 
                 if not text.strip():
                     continue
 
-                speaker = "Ira Representative" if role == "user" else "AI Customer"
+                if is_dental:
+                    speaker = "Front Desk Trainee" if role in ["user", "trainee", "human"] else "Patient"
+                else:
+                    speaker = "Ira Representative" if role == "user" else "AI Customer"
                 lines.append(f"{speaker}: {text.strip()}")
 
             transcript_text = "\n".join(lines)
