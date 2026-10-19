@@ -1,7 +1,7 @@
 import json
 import logging
 from typing import List, Optional
-from fastapi import APIRouter, Depends, HTTPException, BackgroundTasks, status
+from fastapi import APIRouter, Depends, HTTPException, BackgroundTasks, status, Response
 
 from app.schemas.autocoach import (
     AutoCoachSessionCreate,
@@ -9,7 +9,7 @@ from app.schemas.autocoach import (
     AutoCoachTokenRequest,
     AutoCoachReportPayload,
 )
-from app.schemas.report import ReportCreate
+from app.schemas.report import ReportCreate, ReportDetail, ReportListResponse
 from app.schemas.room import RoomResponse
 from app.schemas.token import TokenResponse
 from app.services.autocoach_service import IAutoCoachService
@@ -226,3 +226,102 @@ async def receive_autocoach_report(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
             detail=f"Failed to process AutoCoach report: {str(e)}",
         )
+
+
+@router.get(
+    "/reports",
+    response_model=ReportListResponse,
+    summary="List AutoCoach Dental Training Reports",
+)
+async def list_autocoach_reports(
+    report_service: IReportService = Depends(get_report_service),
+):
+    """
+    Lists all AutoCoach dental simulation reports with aggregate statistics.
+    Only returns dental simulation reports (agent_type='AutoCoach STS' or dental_* scenarios).
+    """
+    try:
+        return await report_service.list_autocoach_reports()
+    except Exception as e:
+        logger.exception(f"Error listing AutoCoach reports: {e}")
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail=f"Failed to list AutoCoach reports: {str(e)}",
+        )
+
+
+@router.get(
+    "/reports/{job_id}",
+    response_model=ReportDetail,
+    summary="Get AutoCoach Dental Report Detail",
+)
+async def get_autocoach_report(
+    job_id: str,
+    report_service: IReportService = Depends(get_report_service),
+):
+    """
+    Retrieves full evaluation details for an AutoCoach dental training session.
+    """
+    report = await report_service.get_autocoach_report(job_id)
+    if not report:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail=f"AutoCoach report for job '{job_id}' not found",
+        )
+    return report
+
+
+@router.get(
+    "/reports/{job_id}/status",
+    summary="Get AutoCoach Dental Report Evaluation Status",
+)
+async def get_autocoach_report_status(
+    job_id: str,
+    response: Response,
+    report_service: IReportService = Depends(get_report_service),
+):
+    """
+    Returns the evaluation status of an AutoCoach dental report (ongoing, completed, failed).
+    """
+    response.headers["Cache-Control"] = "no-store, no-cache, must-revalidate, max-age=0"
+    response.headers["Pragma"] = "no-cache"
+    response.headers["Expires"] = "0"
+
+    result = await report_service.get_autocoach_report_status(job_id)
+    if result is None:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail=f"AutoCoach report for job '{job_id}' not found",
+        )
+    return result
+
+
+@router.post(
+    "/reports/{job_id}/retry",
+    summary="Retry AutoCoach Dental Report Evaluation",
+)
+async def retry_autocoach_report_evaluation(
+    job_id: str,
+    background_tasks: BackgroundTasks,
+    report_service: IReportService = Depends(get_report_service),
+):
+    """
+    Retries Gemini background evaluation for an AutoCoach report using the Dental Front Desk SOP rubric.
+    """
+    result = await report_service.retry_autocoach_evaluation(job_id)
+    if result.get("status") == "error":
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail=result.get("message", "AutoCoach report not found"),
+        )
+
+    # Schedule background re-evaluation with dental rubric
+    scenario = result.get("scenario") or "dental_scheduling"
+    background_tasks.add_task(
+        run_background_evaluation,
+        job_id,
+        result.get("chat_history"),
+        scenario,
+    )
+
+    return {"status": "success", "message": f"Retry evaluation started for AutoCoach job {job_id}."}

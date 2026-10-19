@@ -20,22 +20,42 @@ class IReportService(ABC):
 
     @abstractmethod
     async def list_reports(self) -> ReportListResponse:
-        """Lists all reports with aggregate statistics."""
+        """Lists legacy (non-AutoCoach) reports with aggregate statistics."""
         pass
 
     @abstractmethod
     async def get_report(self, job_id: str) -> Optional[ReportDetail]:
-        """Returns full report detail by job_id."""
+        """Returns full legacy report detail by job_id."""
         pass
 
     @abstractmethod
     async def get_report_status(self, job_id: str) -> Optional[dict]:
-        """Returns the evaluation status of a report."""
+        """Returns the evaluation status of a legacy report."""
         pass
 
     @abstractmethod
     async def retry_evaluation(self, job_id: str) -> dict:
-        """Re-runs Gemini evaluation on a stored report's chat history."""
+        """Re-runs Gemini evaluation on a stored legacy report's chat history."""
+        pass
+
+    @abstractmethod
+    async def list_autocoach_reports(self) -> ReportListResponse:
+        """Lists only AutoCoach dental reports with aggregate statistics."""
+        pass
+
+    @abstractmethod
+    async def get_autocoach_report(self, job_id: str) -> Optional[ReportDetail]:
+        """Returns full AutoCoach dental report detail by job_id."""
+        pass
+
+    @abstractmethod
+    async def get_autocoach_report_status(self, job_id: str) -> Optional[dict]:
+        """Returns the evaluation status of an AutoCoach dental report."""
+        pass
+
+    @abstractmethod
+    async def retry_autocoach_evaluation(self, job_id: str) -> dict:
+        """Re-runs Gemini evaluation on a stored AutoCoach dental report's chat history."""
         pass
 
     @abstractmethod
@@ -106,10 +126,19 @@ class ReportService(IReportService):
             logger.exception(f"Error in background evaluation for job {job_id}: {e}")
             await self.repository.update_summary(job_id, None, 0, "failed")
 
-    async def list_reports(self) -> ReportListResponse:
-        logger.info("Listing all reports")
-        rows = await self.repository.get_all()
+    @staticmethod
+    def _is_autocoach_row(r: dict) -> bool:
+        """Determines whether a report row belongs to the AutoCoach dental workflow."""
+        agent_type = (r.get("agent_type") or "").strip()
+        scenario = (r.get("scenario") or "").strip()
+        room = (r.get("room") or "").strip()
+        return (
+            agent_type == "AutoCoach STS"
+            or scenario.startswith("dental_")
+            or room.startswith("DENTAL-")
+        )
 
+    def _build_list_response(self, rows: List[dict]) -> ReportListResponse:
         reports = []
         completed_reports = []
 
@@ -160,12 +189,7 @@ class ReportService(IReportService):
             },
         )
 
-    async def get_report(self, job_id: str) -> Optional[ReportDetail]:
-        logger.info(f"Getting report detail: {job_id}")
-        row = await self.repository.get_by_job_id(job_id)
-        if not row:
-            return None
-
+    def _row_to_report_detail(self, row: dict) -> ReportDetail:
         # Parse summary and chat_history from stored JSON strings
         summary = row.get("summary")
         if summary and isinstance(summary, str):
@@ -223,16 +247,46 @@ class ReportService(IReportService):
             created_at=row.get("created_at"),
         )
 
+    async def list_reports(self) -> ReportListResponse:
+        logger.info("Listing legacy reports (excluding AutoCoach)")
+        rows = await self.repository.get_legacy_reports()
+        return self._build_list_response(rows)
+
+    async def list_autocoach_reports(self) -> ReportListResponse:
+        logger.info("Listing AutoCoach dental reports")
+        rows = await self.repository.get_autocoach_reports()
+        return self._build_list_response(rows)
+
+    async def get_report(self, job_id: str) -> Optional[ReportDetail]:
+        logger.info(f"Getting legacy report detail: {job_id}")
+        row = await self.repository.get_by_job_id(job_id)
+        if not row or self._is_autocoach_row(row):
+            return None
+        return self._row_to_report_detail(row)
+
+    async def get_autocoach_report(self, job_id: str) -> Optional[ReportDetail]:
+        logger.info(f"Getting AutoCoach dental report detail: {job_id}")
+        row = await self.repository.get_by_job_id(job_id)
+        if not row or not self._is_autocoach_row(row):
+            return None
+        return self._row_to_report_detail(row)
+
     async def get_report_status(self, job_id: str) -> Optional[dict]:
         row = await self.repository.get_by_job_id(job_id)
-        if not row:
+        if not row or self._is_autocoach_row(row):
+            return None
+        return {"status": row.get("status", "completed")}
+
+    async def get_autocoach_report_status(self, job_id: str) -> Optional[dict]:
+        row = await self.repository.get_by_job_id(job_id)
+        if not row or not self._is_autocoach_row(row):
             return None
         return {"status": row.get("status", "completed")}
 
     async def retry_evaluation(self, job_id: str) -> dict:
-        logger.info(f"Retrying evaluation for job: {job_id}")
+        logger.info(f"Retrying legacy evaluation for job: {job_id}")
         row = await self.repository.get_by_job_id(job_id)
-        if not row:
+        if not row or self._is_autocoach_row(row):
             return {"status": "error", "message": "Report not found"}
 
         await self.repository.update_summary(job_id, None, 0, "ongoing")
@@ -241,6 +295,20 @@ class ReportService(IReportService):
             "message": f"Retry evaluation started for job {job_id}.",
             "chat_history": row.get("chat_history"),
             "scenario": row.get("scenario", "sbi"),
+        }
+
+    async def retry_autocoach_evaluation(self, job_id: str) -> dict:
+        logger.info(f"Retrying AutoCoach evaluation for job: {job_id}")
+        row = await self.repository.get_by_job_id(job_id)
+        if not row or not self._is_autocoach_row(row):
+            return {"status": "error", "message": "AutoCoach report not found"}
+
+        await self.repository.update_summary(job_id, None, 0, "ongoing")
+        return {
+            "status": "success",
+            "message": f"Retry evaluation started for AutoCoach job {job_id}.",
+            "chat_history": row.get("chat_history"),
+            "scenario": row.get("scenario", "dental_scheduling"),
         }
 
     async def get_ongoing_reports(self) -> list[dict]:

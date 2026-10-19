@@ -2,7 +2,7 @@ import logging
 from abc import ABC, abstractmethod
 from typing import List, Optional
 from datetime import datetime, UTC
-from sqlalchemy import select
+from sqlalchemy import select, or_, not_, func
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.dialects.postgresql import insert as pg_insert
 from app.models.report import Report
@@ -27,6 +27,16 @@ class IReportRepository(ABC):
     @abstractmethod
     async def get_all(self) -> List[dict]:
         """Retrieves all reports ordered by ended_at descending."""
+        pass
+
+    @abstractmethod
+    async def get_autocoach_reports(self) -> List[dict]:
+        """Retrieves only AutoCoach dental reports ordered by ended_at descending."""
+        pass
+
+    @abstractmethod
+    async def get_legacy_reports(self) -> List[dict]:
+        """Retrieves only legacy (non-AutoCoach) reports ordered by ended_at descending."""
         pass
 
     @abstractmethod
@@ -119,6 +129,36 @@ class SQLAlchemyReportRepository(IReportRepository):
     async def get_all(self) -> List[dict]:
         logger.info("Fetching all reports")
         stmt = select(Report).order_by(Report.ended_at.desc())
+        result = await self.session.execute(stmt)
+        rows = result.scalars().all()
+        return [self._row_to_dict(row) for row in rows]
+
+    @staticmethod
+    def _is_autocoach_condition():
+        return or_(
+            func.coalesce(Report.agent_type, "") == "AutoCoach STS",
+            func.coalesce(Report.scenario, "").like("dental_%"),
+            func.coalesce(Report.room, "").like("DENTAL-%"),
+        )
+
+    async def get_autocoach_reports(self) -> List[dict]:
+        logger.info("Fetching AutoCoach dental reports")
+        stmt = (
+            select(Report)
+            .where(self._is_autocoach_condition())
+            .order_by(Report.ended_at.desc())
+        )
+        result = await self.session.execute(stmt)
+        rows = result.scalars().all()
+        return [self._row_to_dict(row) for row in rows]
+
+    async def get_legacy_reports(self) -> List[dict]:
+        logger.info("Fetching legacy reports (excluding AutoCoach)")
+        stmt = (
+            select(Report)
+            .where(not_(self._is_autocoach_condition()))
+            .order_by(Report.ended_at.desc())
+        )
         result = await self.session.execute(stmt)
         rows = result.scalars().all()
         return [self._row_to_dict(row) for row in rows]

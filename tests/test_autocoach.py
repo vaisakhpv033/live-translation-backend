@@ -330,3 +330,197 @@ def test_api_autocoach_report_endpoint():
         assert data["status"] == "success"
     finally:
         app.dependency_overrides.clear()
+
+
+def test_api_autocoach_list_reports_endpoint():
+    from app.api.dependencies import get_report_service
+    from app.schemas.report import ReportListResponse, ReportSummary
+
+    mock_report_service = MagicMock()
+    mock_report_service.list_autocoach_reports = AsyncMock(return_value=ReportListResponse(
+        reports=[
+            ReportSummary(
+                job_id="job_dental_1",
+                room="DENTAL-Scheduling-MukulSharma-123",
+                started_at="2026-10-19T10:00:00Z",
+                ended_at="2026-10-19T10:05:00Z",
+                overall_score=88,
+                status="completed",
+                customer_name="Mukul Sharma",
+                agent_type="AutoCoach STS",
+                scenario="dental_scheduling",
+                readiness_assessment="Production Ready",
+            )
+        ],
+        stats={
+            "total_calls": 1,
+            "avg_score": 88,
+            "readiness": {
+                "Production Ready": 1,
+                "Ready With Supervision": 0,
+                "Developing": 0,
+                "Needs Significant Coaching": 0,
+                "Not Ready": 0,
+            },
+        },
+    ))
+
+    app.dependency_overrides[get_report_service] = lambda: mock_report_service
+
+    try:
+        response = client.get("/api/v1/autocoach/reports")
+        assert response.status_code == 200
+        data = response.json()
+        assert len(data["reports"]) == 1
+        assert data["reports"][0]["job_id"] == "job_dental_1"
+        assert data["reports"][0]["scenario"] == "dental_scheduling"
+        assert data["stats"]["total_calls"] == 1
+        assert data["stats"]["avg_score"] == 88
+    finally:
+        app.dependency_overrides.clear()
+
+
+def test_api_autocoach_get_report_endpoint():
+    from app.api.dependencies import get_report_service
+    from app.schemas.report import ReportDetail
+
+    mock_report_service = MagicMock()
+    mock_report_service.get_autocoach_report = AsyncMock(side_effect=lambda job_id: (
+        ReportDetail(
+            job_id="job_dental_1",
+            room="DENTAL-Scheduling-MukulSharma-123",
+            started_at="2026-10-19T10:00:00Z",
+            ended_at="2026-10-19T10:05:00Z",
+            overall_score=90,
+            status="completed",
+            customer_name="Mukul Sharma",
+            agent_type="AutoCoach STS",
+            scenario="dental_scheduling",
+            chat_history=[],
+        ) if job_id == "job_dental_1" else None
+    ))
+
+    app.dependency_overrides[get_report_service] = lambda: mock_report_service
+
+    try:
+        # Success case
+        response = client.get("/api/v1/autocoach/reports/job_dental_1")
+        assert response.status_code == 200
+        data = response.json()
+        assert data["job_id"] == "job_dental_1"
+        assert data["scenario"] == "dental_scheduling"
+
+        # 404 case for non-existent or legacy report
+        response_404 = client.get("/api/v1/autocoach/reports/job_legacy_99")
+        assert response_404.status_code == 404
+    finally:
+        app.dependency_overrides.clear()
+
+
+def test_api_autocoach_status_and_retry_endpoint():
+    from app.api.dependencies import get_report_service
+
+    mock_report_service = MagicMock()
+    mock_report_service.get_autocoach_report_status = AsyncMock(return_value={"status": "completed"})
+    mock_report_service.retry_autocoach_evaluation = AsyncMock(return_value={
+        "status": "success",
+        "chat_history": "[]",
+        "scenario": "dental_emergency_trauma",
+    })
+
+    app.dependency_overrides[get_report_service] = lambda: mock_report_service
+
+    try:
+        # Status endpoint
+        status_resp = client.get("/api/v1/autocoach/reports/job_dental_1/status")
+        assert status_resp.status_code == 200
+        assert status_resp.json()["status"] == "completed"
+
+        # Retry endpoint
+        retry_resp = client.post("/api/v1/autocoach/reports/job_dental_1/retry")
+        assert retry_resp.status_code == 200
+        assert retry_resp.json()["status"] == "success"
+    finally:
+        app.dependency_overrides.clear()
+
+
+@pytest.mark.asyncio
+async def test_report_service_strict_segregation():
+    from app.services.report_service import ReportService
+
+    legacy_row = {
+        "job_id": "job_legacy_1",
+        "room": "MF-RahulNair-123",
+        "started_at": "2026-10-19T09:00:00Z",
+        "ended_at": "2026-10-19T09:05:00Z",
+        "duration_seconds": 300,
+        "overall_score": 75,
+        "status": "completed",
+        "customer_name": "Rahul Nair",
+        "agent_type": "STS Agent",
+        "scenario": "sbi",
+        "summary": json.dumps({"readiness_assessment": "Ready With Supervision"}),
+        "chat_history": None,
+    }
+
+    dental_row = {
+        "job_id": "job_dental_1",
+        "room": "DENTAL-Scheduling-MukulSharma-456",
+        "started_at": "2026-10-19T10:00:00Z",
+        "ended_at": "2026-10-19T10:06:00Z",
+        "duration_seconds": 360,
+        "overall_score": 94,
+        "status": "completed",
+        "customer_name": "Mukul Sharma",
+        "agent_type": "AutoCoach STS",
+        "scenario": "dental_scheduling",
+        "summary": json.dumps({"readiness_assessment": "Production Ready"}),
+        "chat_history": None,
+    }
+
+    mock_repo = MagicMock()
+    mock_repo.get_legacy_reports = AsyncMock(return_value=[legacy_row])
+    mock_repo.get_autocoach_reports = AsyncMock(return_value=[dental_row])
+    mock_repo.get_by_job_id = AsyncMock(side_effect=lambda jid: (
+        legacy_row if jid == "job_legacy_1" else (dental_row if jid == "job_dental_1" else None)
+    ))
+    mock_repo.update_summary = AsyncMock()
+
+    mock_eval = MagicMock()
+    service = ReportService(mock_repo, mock_eval)
+
+    # 1. Legacy list should only return legacy row
+    legacy_list = await service.list_reports()
+    assert len(legacy_list.reports) == 1
+    assert legacy_list.reports[0].job_id == "job_legacy_1"
+    assert legacy_list.stats["avg_score"] == 75
+
+    # 2. AutoCoach list should only return dental row
+    autocoach_list = await service.list_autocoach_reports()
+    assert len(autocoach_list.reports) == 1
+    assert autocoach_list.reports[0].job_id == "job_dental_1"
+    assert autocoach_list.stats["avg_score"] == 94
+
+    # 3. Legacy get_report must return None if job_id is dental
+    assert await service.get_report("job_dental_1") is None
+    assert (await service.get_report("job_legacy_1")).job_id == "job_legacy_1"
+
+    # 4. AutoCoach get_autocoach_report must return None if job_id is legacy
+    assert await service.get_autocoach_report("job_legacy_1") is None
+    assert (await service.get_autocoach_report("job_dental_1")).job_id == "job_dental_1"
+
+    # 5. Status segregation
+    assert await service.get_report_status("job_dental_1") is None
+    assert (await service.get_report_status("job_legacy_1"))["status"] == "completed"
+    assert await service.get_autocoach_report_status("job_legacy_1") is None
+    assert (await service.get_autocoach_report_status("job_dental_1"))["status"] == "completed"
+
+    # 6. Retry segregation
+    retry_legacy_err = await service.retry_evaluation("job_dental_1")
+    assert retry_legacy_err["status"] == "error"
+    retry_autocoach_err = await service.retry_autocoach_evaluation("job_legacy_1")
+    assert retry_autocoach_err["status"] == "error"
+    retry_autocoach_ok = await service.retry_autocoach_evaluation("job_dental_1")
+    assert retry_autocoach_ok["status"] == "success"
+    assert retry_autocoach_ok["scenario"] == "dental_scheduling"
+
