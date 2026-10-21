@@ -269,6 +269,40 @@ async def test_evaluate_chat_history_branching():
         assert "gemini-3.8-flash" in (call_args[0] if call_args else call_kwargs.get("url", ""))
 
 
+@pytest.mark.asyncio
+async def test_legacy_evaluation_retains_gemini_25_flash_without_thinking():
+    eval_service = GeminiEvaluationService()
+
+    with patch("httpx.AsyncClient.post") as mock_post:
+        mock_response = MagicMock()
+        mock_response.status_code = 200
+        mock_response.json.return_value = {
+            "candidates": [
+                {
+                    "content": {
+                        "parts": [
+                            {"text": json.dumps({"overall_score": 85, "product_knowledge": {"score": 8, "reason": "Good"}})}
+                        ]
+                    }
+                }
+            ]
+        }
+        mock_post.return_value = mock_response
+
+        chat_json = json.dumps({"items": []})
+        report_card, score = await eval_service.evaluate_chat_history(chat_json, scenario="sbi")
+
+        assert score == 85
+        assert report_card["product_knowledge"]["score"] == 8
+
+        call_kwargs = mock_post.call_args.kwargs
+        call_args = mock_post.call_args.args
+        sent_payload = call_kwargs["json"]
+        assert sent_payload["generationConfig"]["responseSchema"] == GEMINI_QA_REPORT_SCHEMA
+        assert "thinkingConfig" not in sent_payload["generationConfig"]
+        assert "gemini-2.5-flash" in (call_args[0] if call_args else call_kwargs.get("url", ""))
+
+
 # ──────────────────────────────────────────────────────────────
 #  5. Integration Tests: API Endpoints via TestClient
 # ──────────────────────────────────────────────────────────────

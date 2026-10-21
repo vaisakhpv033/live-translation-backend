@@ -739,26 +739,29 @@ class GeminiEvaluationService(IEvaluationService):
         transcript = self._format_transcript(chat_history_str, is_dental=is_dental)
 
         if is_dental:
+            model_name = settings.GEMINI_EVALUATION_MODEL
             system_prompt = SCENARIO_PROMPTS.get(scenario, SYSTEM_PROMPT_DENTAL_COACH)
             response_schema = GEMINI_DENTAL_QA_REPORT_SCHEMA
+            generation_config: dict[str, Any] = {
+                "responseMimeType": "application/json",
+                "responseSchema": response_schema,
+                "thinkingConfig": {
+                    "thinkingLevel": "high"
+                }
+            }
         else:
+            model_name = "gemini-2.5-flash"
             system_prompt = SCENARIO_PROMPTS.get(scenario or "sbi", SYSTEM_PROMPT_SBI)
             response_schema = GEMINI_QA_REPORT_SCHEMA
+            generation_config = {
+                "responseMimeType": "application/json",
+                "responseSchema": response_schema,
+            }
 
         prompt = f"{system_prompt}\n\nHere is the conversation transcript:\n{transcript}"
 
-        model_name = settings.GEMINI_EVALUATION_MODEL
         url = f"https://generativelanguage.googleapis.com/v1beta/models/{model_name}:generateContent?key={api_key}"
         headers = {"Content-Type": "application/json"}
-
-        generation_config: dict[str, Any] = {
-            "responseMimeType": "application/json",
-            "responseSchema": response_schema,
-        }
-        if is_dental:
-            generation_config["thinkingConfig"] = {
-                "thinkingLevel": "high"
-            }
 
         payload = {
             "contents": [
