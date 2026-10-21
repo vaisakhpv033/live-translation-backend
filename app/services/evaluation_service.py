@@ -5,6 +5,7 @@ from abc import ABC, abstractmethod
 from typing import Optional, Tuple
 import httpx
 from app.core.config import get_settings
+from app.services.sop_playbook import DENTAL_SOP_PLAYBOOK_PROMPT_TEXT
 
 logger = logging.getLogger("translation-agent-backend.services.evaluation_service")
 settings = get_settings()
@@ -325,6 +326,36 @@ GEMINI_DENTAL_QA_REPORT_SCHEMA = {
                 "urgent_emergency_triage",
                 "overall_sop_verdict"
             ]
+        },
+        "sop_audit_table": {
+            "type": "ARRAY",
+            "description": "Dynamic line-by-line audit of each specific SOP trigger, objection, or clinical scenario that occurred on this call. Empty list if no specific SOP objection was triggered.",
+            "items": {
+                "type": "OBJECT",
+                "properties": {
+                    "sop_id": {"type": "STRING", "description": "Identifier of the SOP rule from the playbook (e.g. 'sop_external_xrays', 'sop_prepayment_rebuttal')"},
+                    "sop_title": {"type": "STRING", "description": "Title of the SOP rule"},
+                    "section": {"type": "STRING", "description": "SOP section category e.g. 'Reason of Appointment', 'Insurance & Fees', 'collect payment', 'select office'"},
+                    "patient_trigger_quote": {"type": "STRING", "description": "Direct verbatim quote from transcript of the patient's objection, inquiry, or challenge"},
+                    "trainee_actual_quote": {"type": "STRING", "description": "Direct verbatim quote of the trainee's actual spoken response"},
+                    "verdict": {
+                        "type": "STRING",
+                        "description": "Compliance verdict: 'Adhered', 'Partially Adhered', 'Violated', or 'Missed Opportunity'"
+                    },
+                    "violation_details": {"type": "STRING", "description": "Specific explanation of what was violated or missing from the required protocol, or praise if adhered"},
+                    "approved_sop_verbiage": {"type": "STRING", "description": "Official approved verbiage and directives from the SOP Playbook"}
+                },
+                "required": [
+                    "sop_id",
+                    "sop_title",
+                    "section",
+                    "patient_trigger_quote",
+                    "trainee_actual_quote",
+                    "verdict",
+                    "violation_details",
+                    "approved_sop_verbiage"
+                ]
+            }
         }
     },
     "required": [
@@ -345,7 +376,8 @@ GEMINI_DENTAL_QA_REPORT_SCHEMA = {
         "coaching_recommendations",
         "readiness_assessment",
         "readiness_reasoning",
-        "sop_adherence_summary"
+        "sop_adherence_summary",
+        "sop_audit_table"
     ]
 }
 
@@ -504,7 +536,7 @@ You must also synthesize a structured "claim_summary" object containing the foll
 For any field where information is not present or cannot be determined from either the telemetry or transcript, return "N/A"."""
 
 
-SYSTEM_PROMPT_DENTAL_COACH = """You are an expert Dental Front Desk Quality Analyst, Patient Experience Trainer, and Call Center Coach.
+SYSTEM_PROMPT_DENTAL_COACH = f"""You are an expert Dental Front Desk Quality Analyst, Patient Experience Trainer, and Call Center Coach.
 Your task is to evaluate the conversation between a Dental Front Desk Representative / Trainee and a dental patient (caller).
 Evaluate the Front Desk Trainee ONLY. Do NOT evaluate the patient.
 Use the entire conversation transcript as evidence. Be objective, thorough, and specific with direct quotes.
@@ -513,77 +545,50 @@ Do not invent information that was not present in the conversation.
 EVALUATION CRITERIA (Scored 1 to 10 with direct evidence):
 1. Rapport & Professionalism — Warm greeting, empathy, identifying self and dental practice, treating patient like family.
 2. Discovery & Needs Analysis — Asking diagnostic questions regarding patient's dental pain, symptoms, dental history, and urgency.
-3. SOP Adherence — Strict adherence to dental front desk verbiages and protocols (System down, Spanish patient, Doctor request, Note pauses, Balance collection, 6-month X-rays, etc.).
+3. SOP Adherence — Strict adherence to dental front desk verbiages and protocols (System down, Spanish patient, Doctor request, Note pauses, Balance collection, 6-month X-rays, Payment hold, etc.).
 4. Communication Skills — Clear, empathetic, jargon-free explanations, conversational pacing, polite articulation.
 5. Objection Handling — Managing pushback on pricing, past-due balances, doctor availability, appointment availability, or remote employee status without defensiveness.
 6. Recommendation Quality — Scheduling appropriate appointment slots, explaining comprehensive exam/X-ray procedures (or 3D cone beam scan for implants), prioritizing emergency triage if in pain.
 7. Compliance & Privacy Guardrails — HIPAA compliance, privacy, reminding patient that the doctor must examine before diagnosis, not making unauthorized medical diagnoses or guarantees.
 8. Closing Effectiveness — Reconfirming appointment date/time, doctor name, parking/arrival instructions, callback numbers, warm sign-off.
 
-DENTAL FRONT DESK SOP VERBIAGES AND OBJECTION HANDLING DIRECTIVES:
-Whenever an objection or specific scenario arises on the call, check whether the trainee adhered to the standard verbiages below:
+{DENTAL_SOP_PLAYBOOK_PROMPT_TEXT}
 
-1. SYSTEM DOWN / FROZE:
-   - Protocol: Buy time while speaking to see if system recovers.
-   - If taking long: "Hey [pt name], sorry my system is down right now, I am just restarting my computer. In the meantime can I collect few details/information of you if you could wait for couple of minutes or shall I get back to you after a while once the system is up?"
-   - If completely frozen: "Hey [pt name], my system is just froze right now, I cannot confirm the appointment right now but I can give you tentative date and once the system is up I can call you back and confirm it."
+REASONING & INTERNAL CONSISTENCY INSTRUCTIONS:
+Use your internal reasoning process to analyze the transcript thoroughly before generating the structured report card:
 
-2. SPANISH PATIENT / CALLER:
-   - "I apologize, I dont speak spanish (lo siento muchisimo. Yo no, hablo espanol)"
-   - "Please hold the line, let me transfer your call (Espera un momento Déjeme transferir su llamada)"
-   - "Is it okay if I arrange a call back for you with our Spanish speaker? (Está bien si programo una llamada para usted con nuestro hablante de español?)"
+1. CHRONOLOGICAL TRANSCRIPT WALKTHROUGH:
+   Trace the dialogue turn by turn. Identify every objection, question, policy challenge, friction point, or specific office situation raised by the patient.
 
-3. CALLER ASKING TO SPEAK TO A DOCTOR:
-   - CRITICAL: Never put caller on hold or try to find where the doctor is.
-   - Standard reply: "Hey, dr is busy with the pt is there anything I can help you with."
-   - If office closed: "Hey dr is not in today because we are closed, is there anything I can help you with."
-   - If caller insists: "Hey dr is busy with the pt if I can take the message for you, I will pass on the message to them and they call you back."
-   - If caller refuses details: "Hey the more details you can give me then the faster I can arrange a call back."
+2. SOP TRIGGER IDENTIFICATION & DYNAMIC AUDIT TABLE:
+   Cross-reference all detected objections against the 41 rules in the SOP Playbook above.
+   For EVERY triggered situation, add an entry to 'sop_audit_table':
+   - 'sop_id': Exact rule identifier (e.g. 'sop_external_xrays', 'sop_prepayment_rebuttal', 'sop_cost_root_canal', 'sop_balance_due').
+   - 'sop_title': Clean human-readable title.
+   - 'section': Playbook section.
+   - 'patient_trigger_quote': Verbatim quote of what the caller said.
+   - 'trainee_actual_quote': Verbatim quote of the trainee's actual response.
+   - 'verdict': One of 'Adhered', 'Partially Adhered', 'Violated', or 'Missed Opportunity'.
+   - 'violation_details': Explain specifically what was missing, breached, or done well according to the playbook.
+   - 'approved_sop_verbiage': The official playbook verbiage and directives.
+   If NO specific objections were triggered on the call, 'sop_audit_table' MUST be an empty array [].
 
-4. NOTE-TAKING PAUSES (AVOIDING DEAD AIR):
-   - "Can you please give me a moment while I note down all that you are informing so that I can inform the team so that the team can be prepared to take best care for you."
-
-5. PATIENT MOVING AWAY FROM TOWN:
-   - "[pt name] we are sorry to hear that you are leaving us and we wish you best of luck on your move, if ever you are back and want to come for an appt we are here for you. we will be happy to have you."
-
-6. BILLING / OTHER DEPARTMENT INQUIRY:
-   - "Hey the person who handles the billing is not available at the moment. Let me take all your information and I will pass the information to them. And they will get back to you by [2 business days]. Is that ok?" (If urgent/escalated, notify office immediately).
-
-7. REMOTE / ANSWERING SERVICE INQUIRY:
-   - "Yes, I completely understand your curiosity. I work remotely to help the team with this part of the process and I work closely with them to collect all the necessary information so that when they have you in the office, they have more time to focus on taking best care of you."
-
-8. REPEATED APPOINTMENT OFFENDER (FREQUENT CANCELLATIONS / NO-SHOWS):
-   - "I apologize [pt name], but it looks like we are booked out. what i can advice you to do is on a day when you are available call the office to see if there is any same day appt available."
-
-9. ARCHIVED / DISMISSED PATIENT:
-   - If emergency: Schedule them.
-   - If general exam/cleaning: "I apologize [pt name], but it looks like we are booked out. what i can advice you to do is, on a day when you are available, call the office to see if there is any same day appt available." Or refer to insurance company for other offices.
-
-10. INACTIVE PATIENT:
-    - Search CRM/PMS for deactivation reason.
-    - If moved away and returned: Schedule 3-4 days out to give office time to review chart.
-    - If inactive due to big balance/rude: "Hey [Patient Name], I do not have an appt available right away. Let me take your information and give you a call back if anything opens up."
-
-11. PATIENT HAS A BALANCE DUE:
-    - If protocol is to collect before scheduling: "Hey [Patient Name], I’d be happy to schedule an appointment for you. I see you currently have a balance of [amount], and we do need to collect that before booking the appointment. How would you like to take care of it?"
-    - If patient refuses: "Hey, unfortunately I can not do that, the balance is pending from a while and we need to collect that payment before scheduling an appointment."
-
-12. RAPPORT BUILDING & 1ST APPOINTMENT WORKFLOW:
-    - "Hey [Patient Name], we can definitely help you with that, please know that your 1st appointment is going to be for an exam with the doctor, so that doctor can take a look at the affected area and see what it looks like. Then if needed the doctor will take X-ray to diagnose the affected area and then go over different options with you. Dr [Name] loves her patients and treats them like family."
-    - If implant consultation: Mention 3D cone beam scan (precision view of bone and nerve structure for comfortable, safe planning).
-
-13. EXISTING X-RAYS FROM OTHER OFFICE:
-    - Must be within the last 6 months.
-    - "If you’ve had X-rays taken within the last 6 months, you’re welcome to send them to us by email at least 48 hours before your appointment. Please make sure the images include the date they were taken. If the quality of the X-rays is good and, during your exam, the doctor sees that your oral condition hasn’t changed since then, we may not need to take new ones."
-
-14. EMERGENCY URGENCY TRIAGE:
-    - Determine if caller has acute pain, severe swelling, facial trauma, or bleeding. Offer same-day priority slot.
-
-15. PRICE SHOPPER / COST INQUIRY:
-    - Provide standard comprehensive exam & X-ray estimate politely, explain that the doctor must evaluate oral conditions in person before determining any treatment cost, and reassure that all costs and options are reviewed prior to starting any treatment.
-
-STRUCTURED SOP ADHERENCE SUMMARY:
-Synthesize an 'sop_adherence_summary' assessing each relevant SOP category. Use 'N/A' for any situation not occurring during this call."""
+3. STRICT INTERNAL CONSISTENCY RECONCILIATION:
+   You MUST reconcile your scores so there are NO contradictory evaluations in the report card:
+   - If any rule in 'sop_audit_table' has a verdict of 'Violated' or 'Missed Opportunity':
+     * 'sop_adherence.score' CANNOT exceed 6/10 for 1 violation, and cannot exceed 4/10 for 2+ violations.
+     * 'objection_handling.score' MUST be penalized proportionally (cannot be rated 9 or 10 if an objection was violated).
+     * 'sop_adherence_summary.overall_sop_verdict' MUST be 'Partially Compliant' or 'Non-Compliant'.
+     * The violation MUST be listed in 'improvement_areas' or 'missed_opportunities'.
+   - If all detected triggers are 'Adhered':
+     * 'sop_adherence.score' should be 8-10.
+     * 'overall_sop_verdict' is 'Fully Compliant'.
+   - If no objections occurred (clean standard inquiry):
+     * 'sop_adherence.score' is based on standard greeting, note pauses, and general practice protocols (typically 8-10).
+     * 'overall_sop_verdict' is 'Fully Compliant'.
+   - Overall Score (1 to 100) must reflect the weighted composite:
+     Rapport 10%, Discovery 15%, SOP Adherence 25%, Communication 10%, Objection Handling 20%, Recommendation Quality 10%, Compliance 10%.
+"""
 
 
 SCENARIO_PROMPTS = {
@@ -607,14 +612,23 @@ SCENARIO_PROMPTS = {
     "dental-scheduling": SYSTEM_PROMPT_DENTAL_COACH,
     "dental_emergency": SYSTEM_PROMPT_DENTAL_COACH,
     "dental-emergency": SYSTEM_PROMPT_DENTAL_COACH,
+    "dental_emergency_triage": SYSTEM_PROMPT_DENTAL_COACH,
+    "dental-emergency-triage": SYSTEM_PROMPT_DENTAL_COACH,
     "dental_price_shopper": SYSTEM_PROMPT_DENTAL_COACH,
     "dental-price-shopper": SYSTEM_PROMPT_DENTAL_COACH,
+    "dental_frontdesk_compliance": SYSTEM_PROMPT_DENTAL_COACH,
+    "dental-frontdesk-compliance": SYSTEM_PROMPT_DENTAL_COACH,
+    "dental_clinical_objections": SYSTEM_PROMPT_DENTAL_COACH,
+    "dental-clinical-objections": SYSTEM_PROMPT_DENTAL_COACH,
+    "dental_insurance_copay": SYSTEM_PROMPT_DENTAL_COACH,
+    "dental-insurance-copay": SYSTEM_PROMPT_DENTAL_COACH,
     "dental_insurance_verification": SYSTEM_PROMPT_DENTAL_COACH,
     "dental-insurance-verification": SYSTEM_PROMPT_DENTAL_COACH,
     "dental_implant_consult": SYSTEM_PROMPT_DENTAL_COACH,
     "dental-implant-consult": SYSTEM_PROMPT_DENTAL_COACH,
     "dental_records_transfer": SYSTEM_PROMPT_DENTAL_COACH,
     "dental-records-transfer": SYSTEM_PROMPT_DENTAL_COACH,
+    "custom_scenario": SYSTEM_PROMPT_DENTAL_COACH,
     "autocoach_dental": SYSTEM_PROMPT_DENTAL_COACH,
     "autocoach": SYSTEM_PROMPT_DENTAL_COACH,
 }
@@ -721,7 +735,7 @@ class GeminiEvaluationService(IEvaluationService):
             logger.error("Gemini API key not configured.")
             return None, 0
 
-        is_dental = bool(scenario and (scenario.startswith("dental") or "autocoach" in scenario.lower()))
+        is_dental = bool(scenario and (scenario.startswith("dental") or "autocoach" in scenario.lower() or scenario == "custom_scenario"))
         transcript = self._format_transcript(chat_history_str, is_dental=is_dental)
 
         if is_dental:
@@ -733,8 +747,18 @@ class GeminiEvaluationService(IEvaluationService):
 
         prompt = f"{system_prompt}\n\nHere is the conversation transcript:\n{transcript}"
 
-        url = f"https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:generateContent?key={api_key}"
+        model_name = settings.GEMINI_EVALUATION_MODEL
+        url = f"https://generativelanguage.googleapis.com/v1beta/models/{model_name}:generateContent?key={api_key}"
         headers = {"Content-Type": "application/json"}
+
+        generation_config: dict[str, Any] = {
+            "responseMimeType": "application/json",
+            "responseSchema": response_schema,
+        }
+        if is_dental:
+            generation_config["thinkingConfig"] = {
+                "thinkingLevel": "high"
+            }
 
         payload = {
             "contents": [
@@ -742,10 +766,7 @@ class GeminiEvaluationService(IEvaluationService):
                     "parts": [{"text": prompt}]
                 }
             ],
-            "generationConfig": {
-                "responseMimeType": "application/json",
-                "responseSchema": response_schema
-            }
+            "generationConfig": generation_config
         }
 
         max_retries = 3

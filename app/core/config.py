@@ -28,6 +28,7 @@ class Settings(BaseSettings):
 
     # Gemini API (for report evaluation)
     GEMINI_API_KEY: str = Field(description="Gemini API key for chat transcript evaluation")
+    GEMINI_EVALUATION_MODEL: str = Field(default="gemini-3.8-flash", description="Gemini model for QA evaluation")
 
     # Twilio SIP Telephony
     TWILIO_PHONE_NUMBER: str = Field(default="", description="Twilio phone number in E.164 format (e.g. +16183427090)")

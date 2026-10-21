@@ -168,15 +168,16 @@ async def test_handshake_timeout_cleans_up_room_and_raises_504():
 # ──────────────────────────────────────────────────────────────
 
 def test_dental_schema_structure():
-    # Must contain sop_adherence and sop_adherence_summary
+    # Must contain sop_adherence, sop_adherence_summary, and sop_audit_table
     assert "sop_adherence" in GEMINI_DENTAL_QA_REPORT_SCHEMA["properties"]
     assert "sop_adherence_summary" in GEMINI_DENTAL_QA_REPORT_SCHEMA["properties"]
+    assert "sop_audit_table" in GEMINI_DENTAL_QA_REPORT_SCHEMA["properties"]
     
     # Must NOT contain product_knowledge or claim_summary
     assert "product_knowledge" not in GEMINI_DENTAL_QA_REPORT_SCHEMA["properties"]
     assert "claim_summary" not in GEMINI_DENTAL_QA_REPORT_SCHEMA["properties"]
     
-    # Verify the 14 dental SOP check fields exist
+    # Verify the 14 dental SOP check fields exist in sop_adherence_summary
     sop_summary_props = GEMINI_DENTAL_QA_REPORT_SCHEMA["properties"]["sop_adherence_summary"]["properties"]
     assert "system_down_handling" in sop_summary_props
     assert "spanish_patient_handling" in sop_summary_props
@@ -192,6 +193,17 @@ def test_dental_schema_structure():
     assert "first_visit_explanation" in sop_summary_props
     assert "urgent_emergency_triage" in sop_summary_props
     assert "overall_sop_verdict" in sop_summary_props
+
+    # Verify sop_audit_table items structure
+    audit_item_props = GEMINI_DENTAL_QA_REPORT_SCHEMA["properties"]["sop_audit_table"]["items"]["properties"]
+    assert "sop_id" in audit_item_props
+    assert "sop_title" in audit_item_props
+    assert "section" in audit_item_props
+    assert "patient_trigger_quote" in audit_item_props
+    assert "trainee_actual_quote" in audit_item_props
+    assert "verdict" in audit_item_props
+    assert "violation_details" in audit_item_props
+    assert "approved_sop_verbiage" in audit_item_props
 
 
 def test_legacy_schema_structure_untouched():
@@ -248,10 +260,13 @@ async def test_evaluate_chat_history_branching():
         assert score == 92
         assert report_card["sop_adherence"]["score"] == 9
         
-        # Verify the payload sent to Gemini used GEMINI_DENTAL_QA_REPORT_SCHEMA
+        # Verify the payload sent to Gemini used GEMINI_DENTAL_QA_REPORT_SCHEMA, thinkingConfig, and gemini-3.8-flash
         call_kwargs = mock_post.call_args.kwargs
+        call_args = mock_post.call_args.args
         sent_payload = call_kwargs["json"]
         assert sent_payload["generationConfig"]["responseSchema"] == GEMINI_DENTAL_QA_REPORT_SCHEMA
+        assert sent_payload["generationConfig"]["thinkingConfig"] == {"thinkingLevel": "high"}
+        assert "gemini-3.8-flash" in (call_args[0] if call_args else call_kwargs.get("url", ""))
 
 
 # ──────────────────────────────────────────────────────────────
