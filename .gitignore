@@ -8,4 +8,7 @@ __pycache__
 .env.*
 .dockerignore
 uv.lock
-.pytest_cache/
+.pytest_cache/
+sop_rules.json
+test_gemini_dental_eval.py 
+test_gemini.py

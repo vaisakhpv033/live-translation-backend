@@ -36,6 +36,34 @@ class Settings(BaseSettings):
     TWILIO_SIP_USERNAME: str = Field(default="", description="SIP trunk authentication username")
     TWILIO_SIP_PASSWORD: str = Field(default="", description="SIP trunk authentication password")
 
+    # Open Dental Gateway Configuration
+    OPENDENTAL_BASE_URL: str = Field(
+        default="https://api.opendental.com/api/v1",
+        description="Base URL for Open Dental API"
+    )
+    OPENDENTAL_DEVELOPER_KEY: str = Field(
+        default="",
+        description="Open Dental Developer Key"
+    )
+    OPENDENTAL_CUSTOMER_KEY: str = Field(
+        default="",
+        description="Open Dental Customer Key"
+    )
+    PATIENT_CACHE_MAXSIZE: int = Field(
+        default=2000,
+        description="Max items in patient LRU cache"
+    )
+    PATIENT_CACHE_TTL: int = Field(
+        default=3600,
+        description="Patient cache TTL in seconds (1 hour)"
+    )
+
+    # API Protection Key for Patients Endpoints
+    PATIENT_API_KEY: str = Field(
+        default="autocoach-dental-secret-key",
+        description="API Key required in X-API-Key header to access patient endpoints"
+    )
+
     # CORS Settings
     ALLOWED_ORIGINS: str = "http://localhost:3000,http://127.0.0.1:3000"
 
@@ -71,6 +99,19 @@ class Settings(BaseSettings):
         elif url.startswith("ws://"):
             return url.replace("ws://", "http://")
         return url
+
+    @property
+    def opendental_headers(self) -> dict[str, str]:
+        """
+        Headers required for Open Dental API requests.
+        """
+        headers = {
+            "Accept": "application/json",
+            "Content-Type": "application/json",
+        }
+        if self.OPENDENTAL_DEVELOPER_KEY and self.OPENDENTAL_CUSTOMER_KEY:
+            headers["Authorization"] = f"ODFHIR {self.OPENDENTAL_DEVELOPER_KEY}/{self.OPENDENTAL_CUSTOMER_KEY}"
+        return headers
 
     model_config = SettingsConfigDict(
         env_file=".env",

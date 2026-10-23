@@ -1,3 +1,4 @@
+from typing import Optional
 from fastapi import Depends
 from livekit import api
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -125,5 +126,45 @@ def get_autocoach_service(
     """
     from app.services.autocoach_service import LiveKitAutoCoachService
     return LiveKitAutoCoachService(lk_client)
+
+
+# ──────────────────────────────────────────────────────────────
+#  Open Dental Patient Dependencies & API Key Protection
+# ──────────────────────────────────────────────────────────────
+
+from fastapi import Security, HTTPException, status
+from fastapi.security import APIKeyHeader
+from app.core.config import get_settings
+
+patient_api_key_header = APIKeyHeader(name="X-API-Key", auto_error=False)
+
+
+async def verify_patient_api_key(
+    api_key: Optional[str] = Security(patient_api_key_header),
+) -> str:
+    """
+    Guards patient search and retrieval endpoints.
+    Requires incoming request to contain the valid secret in 'X-API-Key' header.
+    Returns HTTP 403 Forbidden if invalid or missing.
+    """
+    settings = get_settings()
+    expected_key = settings.PATIENT_API_KEY
+    if not expected_key:
+        return ""
+
+    if not api_key or api_key.strip() != expected_key.strip():
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="Forbidden: Invalid or missing X-API-Key header. Please provide a valid patient API key in .env.",
+        )
+    return api_key
+
+
+def get_patient_service():
+    """
+    FastAPI dependency that returns an OpenDentalPatientService.
+    """
+    from app.services.patient_service import OpenDentalPatientService
+    return OpenDentalPatientService()
 
 
