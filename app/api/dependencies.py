@@ -168,3 +168,11 @@ def get_patient_service():
     return OpenDentalPatientService()
 
 
+
+
+def get_appointment_service():
+    """
+    FastAPI dependency that returns an OpenDentalAppointmentService.
+    """
+    from app.services.appointment_service import OpenDentalAppointmentService
+    return OpenDentalAppointmentService()

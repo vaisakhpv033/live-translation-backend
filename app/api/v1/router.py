@@ -10,6 +10,7 @@ from app.api.v1.endpoints import (
     naaptol_order_confirmation,
     autocoach,
     patients,
+    appointments,
 )
 
 api_router = APIRouter()
@@ -25,6 +26,4 @@ api_router.include_router(career_data.router, prefix="/career-data", tags=["Care
 api_router.include_router(naaptol_order_confirmation.router, prefix="/naaptol-order-confirmation", tags=["Naaptol Order Confirmation"])
 api_router.include_router(autocoach.router, prefix="/autocoach", tags=["AutoCoach"])
 api_router.include_router(patients.router, prefix="/patients", tags=["Patients"])
-
-
-
+api_router.include_router(appointments.router, prefix="/appointments", tags=["Appointments"])
