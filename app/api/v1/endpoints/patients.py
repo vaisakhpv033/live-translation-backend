@@ -5,6 +5,7 @@ from fastapi import APIRouter, Depends, HTTPException, Query, status as http_sta
 from app.schemas.patient import (
     PatientSearchResponse,
     CacheStatsResponse,
+    PatientAppointmentsResponse,
 )
 from app.services.patient_service import OpenDentalPatientService
 from app.api.dependencies import get_patient_service, verify_patient_api_key
@@ -42,7 +43,7 @@ async def search_patients(
     Features:
     - **Ultra-fast cache hits (< 5ms)** via in-memory TTLCache.
     - **Case-insensitive cache key normalization** so 'Smith' and 'smith ' share the cache.
-    - **In-memory Python sorting** by last name, first name, birthdate, or PatNum (since Open Dental API does not support dynamic sort).
+    - **In-memory Python sorting** by last name, first name, birthdate, or PatNum.
     - **Protected by X-API-Key header**.
     """
     try:
@@ -91,9 +92,39 @@ async def clear_patient_cache(
     service: OpenDentalPatientService = Depends(get_patient_service),
 ):
     """
-    Flushes the in-memory LRU search and detail caches.
+    Flushes the in-memory LRU search, detail, and appointment caches.
     """
     return service.clear_cache()
+
+
+@router.get(
+    "/{pat_num}/appointments",
+    response_model=PatientAppointmentsResponse,
+    summary="Get Patient Appointments with Status and Notes",
+)
+async def get_patient_appointments(
+    pat_num: int,
+    service: OpenDentalPatientService = Depends(get_patient_service),
+):
+    """
+    Retrieves all appointment records for a specific PatNum from Open Dental API.
+    
+    Features:
+    - Queries Open Dental `GET /appointments?PatNum={pat_num}`.
+    - Full appointment details: scheduled date/time, procedure description, provider, and complete notes.
+    - Explicit `is_completed` and `is_scheduled` status flags based on `AptStatus`.
+    - Sorted chronologically descending (newest/upcoming first).
+    - In-memory LRU + TTL caching (< 5ms on cache hit).
+    - Protected by X-API-Key header.
+    """
+    try:
+        return await service.get_patient_appointments(pat_num)
+    except Exception as e:
+        logger.exception(f"Error fetching appointments for patient {pat_num}: {e}")
+        raise HTTPException(
+            status_code=http_status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail=f"Failed to fetch appointments from Open Dental: {str(e)}",
+        )
 
 
 @router.get(

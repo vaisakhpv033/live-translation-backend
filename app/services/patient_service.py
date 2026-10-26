@@ -5,7 +5,13 @@ import httpx
 from cachetools import TTLCache
 
 from app.core.config import get_settings
-from app.schemas.patient import PatientSimple, PatientSearchResponse, CacheStatsResponse
+from app.schemas.patient import (
+    PatientSimple,
+    PatientSearchResponse,
+    CacheStatsResponse,
+    AppointmentItem,
+    PatientAppointmentsResponse,
+)
 
 logger = logging.getLogger("translation-agent-backend.services.patient_service")
 settings = get_settings()
@@ -16,6 +22,10 @@ _search_cache = TTLCache(
     ttl=settings.PATIENT_CACHE_TTL
 )
 _detail_cache = TTLCache(
+    maxsize=1000,
+    ttl=settings.PATIENT_CACHE_TTL
+)
+_appointment_cache = TTLCache(
     maxsize=1000,
     ttl=settings.PATIENT_CACHE_TTL
 )
@@ -106,7 +116,7 @@ def sort_patients(patients: List[Dict[str, Any]], sort_by: Optional[str], order:
 
 class OpenDentalPatientService:
     """
-    High-performance patient search service with LRU + TTL Cache-Aside and Python sorting.
+    High-performance patient search and appointment service with LRU + TTL Cache-Aside and Python sorting.
     """
     def __init__(
         self,
@@ -258,12 +268,82 @@ class OpenDentalPatientService:
                 logger.error(f"Failed to fetch patient detail for {pat_num}: {e}")
                 return None
 
+    async def get_patient_appointments(self, pat_num: int) -> PatientAppointmentsResponse:
+        """
+        Retrieves all appointments for a patient using Open Dental GET /appointments?PatNum={pat_num}.
+        Uses appointment LRU + TTL cache and sorts newest/upcoming appointments first.
+        """
+        cache_key = f"patient_appointments:{pat_num}"
+        if cache_key in _appointment_cache:
+            _cache_stats["hits"] += 1
+            cached_appts = _appointment_cache[cache_key]
+            logger.info(f"LRU Cache HIT for appointments of patient #{pat_num} (count: {len(cached_appts)})")
+            return PatientAppointmentsResponse(
+                pat_num=pat_num,
+                count=len(cached_appts),
+                cached=True,
+                appointments=[AppointmentItem.model_validate(a) for a in cached_appts],
+            )
+
+        _cache_stats["misses"] += 1
+        logger.info(f"LRU Cache MISS for appointments of patient #{pat_num}. Fetching from Open Dental...")
+
+        url = f"{self.base_url}/appointments"
+        params = {"PatNum": pat_num}
+
+        async with httpx.AsyncClient(timeout=self.timeout) as client:
+            try:
+                res = await client.get(url, headers=self.headers, params=params)
+                if res.status_code == 200:
+                    raw_data = res.json()
+                    if not isinstance(raw_data, list):
+                        raw_data = []
+
+                    # Sort appointments descending by AptDateTime so newest/upcoming come first
+                    def parse_appt_date(item: Dict[str, Any]) -> str:
+                        return str(item.get("AptDateTime") or "")
+
+                    sorted_appts = sorted(raw_data, key=parse_appt_date, reverse=True)
+
+                    # Store in LRU cache
+                    _appointment_cache[cache_key] = sorted_appts
+
+                    return PatientAppointmentsResponse(
+                        pat_num=pat_num,
+                        count=len(sorted_appts),
+                        cached=False,
+                        appointments=[AppointmentItem.model_validate(a) for a in sorted_appts],
+                    )
+                elif res.status_code == 404:
+                    logger.info(f"No appointments found (404) for patient #{pat_num}")
+                    return PatientAppointmentsResponse(
+                        pat_num=pat_num,
+                        count=0,
+                        cached=False,
+                        appointments=[],
+                    )
+                else:
+                    logger.error(
+                        f"Open Dental GET /appointments error {res.status_code} for PatNum {pat_num}: {res.text[:300]}"
+                    )
+                    return PatientAppointmentsResponse(
+                        pat_num=pat_num,
+                        count=0,
+                        cached=False,
+                        appointments=[],
+                    )
+            except Exception as e:
+                logger.exception(f"HTTP error fetching appointments for patient #{pat_num}: {e}")
+                raise
+
     def clear_cache(self) -> Dict[str, Any]:
-        """Flushes the in-memory search and detail caches."""
+        """Flushes the in-memory search, detail, and appointment caches."""
         cleared_search = len(_search_cache)
         cleared_detail = len(_detail_cache)
+        cleared_appts = len(_appointment_cache)
         _search_cache.clear()
         _detail_cache.clear()
+        _appointment_cache.clear()
         _cache_stats["hits"] = 0
         _cache_stats["misses"] = 0
         return {
@@ -271,6 +351,7 @@ class OpenDentalPatientService:
             "message": "Patient caches flushed successfully",
             "cleared_search_entries": cleared_search,
             "cleared_detail_entries": cleared_detail,
+            "cleared_appointment_entries": cleared_appts,
         }
 
     def get_cache_stats(self) -> CacheStatsResponse:
