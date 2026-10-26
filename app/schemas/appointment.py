@@ -61,11 +61,15 @@ class AppointmentDetailResponse(AppointmentItem):
 
 class AppointmentListResponse(BaseModel):
     """
-    Response model for appointments query filtered by date or date range.
+    Response model for appointments query with explicit pagination metadata.
     """
-    count: int = Field(description="Total number of appointments in this result")
+    count: int = Field(description="Total number of appointments in this page batch")
+    limit: int = Field(default=50, description="Max appointments per page")
+    offset: int = Field(default=0, description="Offset index for current page")
+    has_more: bool = Field(default=False, description="Whether subsequent pages exist")
+    page: int = Field(default=1, description="Current 1-based page number")
     date: Optional[str] = Field(default=None, description="Filtered single date yyyy-MM-dd")
     date_start: Optional[str] = Field(default=None, description="Filtered range start date yyyy-MM-dd")
     date_end: Optional[str] = Field(default=None, description="Filtered range end date yyyy-MM-dd")
     cached: bool = Field(default=False, description="Whether result was served from LRU cache")
-    data: List[AppointmentItem] = Field(default_factory=list, description="Appointments sorted chronologically ascending")
+    data: List[AppointmentItem] = Field(default_factory=list, description="Appointments in this page sorted chronologically ascending")

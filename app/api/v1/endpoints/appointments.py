@@ -18,7 +18,7 @@ router = APIRouter(dependencies=[Depends(verify_patient_api_key)])
 @router.get(
     "",
     response_model=AppointmentListResponse,
-    summary="List Appointments by Date or Date Range",
+    summary="List Appointments with Pagination (by Date or Range)",
 )
 async def list_appointments(
     date: Optional[str] = Query(default=None, description="Specific appointment date in yyyy-MM-dd format"),
@@ -27,18 +27,19 @@ async def list_appointments(
     status: Optional[str] = Query(default=None, description="Filter by status: 'Scheduled', 'Complete', 'Broken', 'Planned', etc."),
     clinic_num: Optional[int] = Query(default=None, alias="ClinicNum", description="Filter by clinic ID"),
     pat_num: Optional[int] = Query(default=None, alias="PatNum", description="Filter by patient ID"),
-    limit: int = Query(default=100, ge=1, le=200, description="Max appointments to return"),
-    offset: int = Query(default=0, ge=0, description="Pagination offset"),
+    limit: int = Query(default=50, ge=1, le=200, description="Max appointments per page (1-200)"),
+    offset: int = Query(default=0, ge=0, description="Pagination offset index (0, 50, 100...)"),
     service: OpenDentalAppointmentService = Depends(get_appointment_service),
 ):
     """
-    Retrieves appointments from Open Dental API filtered by date, date range, status, or clinic.
+    Retrieves appointments from Open Dental API with explicit pagination.
     
     Features:
     - Default view queryable by today's date (`?date=2026-10-26`).
     - Date range search supported (`?dateStart=2026-10-26&dateEnd=2026-10-30`).
-    - Sorted chronologically ascending (earliest to latest in the day).
-    - LRU TTL cached for rapid switching between schedule dates (< 5ms).
+    - Explicit `limit`, `offset`, `page`, and `has_more` flags for robust UI pagination.
+    - Sorted chronologically ascending within each batch.
+    - LRU TTL cached for rapid switching (< 5ms).
     - Protected by X-API-Key header.
     """
     try:
@@ -83,12 +84,6 @@ async def get_appointment_detail(
 ):
     """
     Retrieves full details for a single appointment by AptNum.
-    
-    Features:
-    - Fetches full appointment record (`GET /appointments/{aptNum}`).
-    - Embeds complete patient profile (`GET /patients/{patNum}`) including balances, contact info, and medical notes.
-    - LRU cached for quick retrieval.
-    - Protected by X-API-Key header.
     """
     data = await service.get_appointment_by_id(apt_num=apt_num, include_patient=include_patient)
     if not data:

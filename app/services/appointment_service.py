@@ -31,7 +31,7 @@ def generate_appts_cache_key(
     status: Optional[str] = None,
     clinic_num: Optional[int] = None,
     pat_num: Optional[int] = None,
-    limit: int = 100,
+    limit: int = 50,
     offset: int = 0,
 ) -> str:
     norm_date = (date or "").strip()
@@ -47,7 +47,7 @@ def generate_appts_cache_key(
 
 class OpenDentalAppointmentService:
     """
-    Service for querying appointments by date/range and retrieving single appointment details.
+    Service for querying appointments by date/range with proper pagination and single appointment details.
     Includes LRU caching, chronological sorting, and concurrent patient resolution.
     """
     def __init__(
@@ -68,12 +68,15 @@ class OpenDentalAppointmentService:
         status: Optional[str] = None,
         clinic_num: Optional[int] = None,
         pat_num: Optional[int] = None,
-        limit: int = 100,
+        limit: int = 50,
         offset: int = 0,
     ) -> AppointmentListResponse:
         """
-        Retrieves appointments from Open Dental GET /appointments with filtering.
+        Retrieves paginated appointments from Open Dental GET /appointments.
         """
+        effective_limit = min(200, max(1, limit))
+        current_page = (offset // effective_limit) + 1 if effective_limit > 0 else 1
+
         cache_key = generate_appts_cache_key(
             date=date,
             date_start=date_start,
@@ -81,16 +84,20 @@ class OpenDentalAppointmentService:
             status=status,
             clinic_num=clinic_num,
             pat_num=pat_num,
-            limit=limit,
+            limit=effective_limit,
             offset=offset,
         )
 
         if cache_key in _appts_list_cache:
             _cache_stats["hits"] += 1
             cached_data = _appts_list_cache[cache_key]
-            logger.info(f"Cache HIT for appointments query: {cache_key} (count: {len(cached_data)})")
+            logger.info(f"Cache HIT for appointments page {current_page} (count: {len(cached_data)})")
             return AppointmentListResponse(
                 count=len(cached_data),
+                limit=effective_limit,
+                offset=offset,
+                has_more=(len(cached_data) == effective_limit),
+                page=current_page,
                 date=date,
                 date_start=date_start,
                 date_end=date_end,
@@ -99,11 +106,11 @@ class OpenDentalAppointmentService:
             )
 
         _cache_stats["misses"] += 1
-        logger.info(f"Cache MISS for appointments query. Fetching from Open Dental...")
+        logger.info(f"Cache MISS for appointments page {current_page} (offset: {offset}, limit: {effective_limit}). Fetching from Open Dental...")
 
         params: Dict[str, Any] = {
             "Offset": offset,
-            "Limit": min(200, max(1, limit)),
+            "Limit": effective_limit,
         }
         if date and date.strip():
             params["date"] = date.strip()
@@ -135,8 +142,14 @@ class OpenDentalAppointmentService:
                     sorted_appts = sorted(raw_data, key=appt_time_key)
                     _appts_list_cache[cache_key] = sorted_appts
 
+                    has_more = len(sorted_appts) == effective_limit
+
                     return AppointmentListResponse(
                         count=len(sorted_appts),
+                        limit=effective_limit,
+                        offset=offset,
+                        has_more=has_more,
+                        page=current_page,
                         date=date,
                         date_start=date_start,
                         date_end=date_end,
@@ -146,6 +159,10 @@ class OpenDentalAppointmentService:
                 elif res.status_code == 404:
                     return AppointmentListResponse(
                         count=0,
+                        limit=effective_limit,
+                        offset=offset,
+                        has_more=False,
+                        page=current_page,
                         date=date,
                         date_start=date_start,
                         date_end=date_end,
@@ -156,6 +173,10 @@ class OpenDentalAppointmentService:
                     logger.error(f"Open Dental GET /appointments error {res.status_code}: {res.text[:300]}")
                     return AppointmentListResponse(
                         count=0,
+                        limit=effective_limit,
+                        offset=offset,
+                        has_more=False,
+                        page=current_page,
                         date=date,
                         date_start=date_start,
                         date_end=date_end,
