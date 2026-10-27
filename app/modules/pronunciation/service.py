@@ -110,14 +110,30 @@ class LocalPronunciationService(BasePronunciationService):
 
         elapsed_ms = round((time.perf_counter() - t_start) * 1000.0, 1)
 
-        # 3. Format per-word ratings
+        # 3. Format per-word ratings & bad words list
         words_list: List[WordPronunciationScore] = []
-        err_words_set = {w.lower().strip() for w in (result.words_with_errors or [])}
+        raw_bad_words = [str(w) for w in (result.words_with_errors or [])]
+        err_words_set = {w.lower().strip(".,!?:;\"'") for w in raw_bad_words}
+        bad_words_list: List[str] = list(raw_bad_words)
+
         for item in (result.reference_words or []):
             word_str = item.get("word", "")
-            is_err = item.get("correct") is False or word_str.lower().strip() in err_words_set
-            score_val = 0.0 if is_err else 100.0
-            label_val = "Needs work" if is_err else "Good"
+            clean_w = word_str.lower().strip(".,!?:;\"'")
+            lvl = item.get("level", "good")
+            is_err = (lvl == "bad") or (item.get("correct") is False) or (clean_w in err_words_set)
+            
+            if is_err:
+                score_val = 0.0
+                label_val = "Needs work"
+                if word_str and clean_w not in {b.lower().strip(".,!?:;\"'") for b in bad_words_list}:
+                    bad_words_list.append(word_str)
+            elif lvl == "ok":
+                score_val = 60.0
+                label_val = "Borderline"
+            else:
+                score_val = 100.0
+                label_val = "Good"
+
             words_list.append(
                 WordPronunciationScore(
                     word=word_str,
@@ -170,6 +186,7 @@ class LocalPronunciationService(BasePronunciationService):
             rating_label=rating_label,
             passed=bool(result.passed),
             annotated_phrase=annotated_phrase,
+            bad_words=bad_words_list,
             words=words_list,
             sounds_to_work_on=sounds_list,
             ipa_breakdown=PhoneticIPABreakdown(

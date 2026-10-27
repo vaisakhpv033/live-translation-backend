@@ -43,6 +43,7 @@ class PronunciationScoreResponse(BaseModel):
     rating_label: str = Field(..., description="Verbal rating ('Excellent', 'Good', 'Needs work (Try Again)')")
     passed: bool = Field(..., description="True if score passes the threshold")
     annotated_phrase: str = Field(..., description="Prompt phrase with mispronounced words highlighted")
+    bad_words: List[str] = Field(default_factory=list, description="Explicit list of mispronounced/bad words identified")
     words: List[WordPronunciationScore] = Field(default_factory=list, description="Per-word pronunciation breakdown")
     sounds_to_work_on: List[SoundToWorkOn] = Field(default_factory=list, description="Top prioritized phonemes needing practice")
     ipa_breakdown: PhoneticIPABreakdown = Field(..., description="Comparison between expected and transcribed IPA")
