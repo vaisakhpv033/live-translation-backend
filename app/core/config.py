@@ -64,6 +64,24 @@ class Settings(BaseSettings):
         description="API Key required in X-API-Key header to access patient endpoints"
     )
 
+    # Demo Frontend Single User Auth
+    DEMO_AUTH_USERNAME: str = Field(
+        default="admin",
+        description="Username for demo frontend login"
+    )
+    DEMO_AUTH_PASSWORD: str = Field(
+        default="SpotOnAdmin2026!",
+        description="Password for demo frontend login"
+    )
+    DEMO_JWT_SECRET: str = Field(
+        default="sos-autocoach-jwt-secret-key-2026-demo",
+        description="JWT secret key for demo frontend session"
+    )
+    DEMO_JWT_EXPIRE_HOURS: int = Field(
+        default=24,
+        description="JWT expiration hours"
+    )
+
     # Pronunciation Assessment Engine
     ENABLE_PRONUNCIATION_ENGINE: bool = Field(
         default=True,
