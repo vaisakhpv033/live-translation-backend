@@ -23,6 +23,7 @@ router = APIRouter(prefix="/pronunciation", tags=["Pronunciation Assessment"])
 async def score_pronunciation(
     audio_file: UploadFile = File(..., description="Speech recording audio file"),
     expected_text: str = Form(..., description="Target sentence/phrase the user read"),
+    language: str = Form("en-us", description="Language code: 'en-us' (English) or 'es' (Spanish)"),
     service: BasePronunciationService = Depends(get_pronunciation_service),
 ) -> PronunciationScoreResponse:
     if not expected_text or not expected_text.strip():
@@ -39,7 +40,7 @@ async def score_pronunciation(
                 detail="Uploaded audio file is empty.",
             )
 
-        return await service.score_audio(raw_bytes, expected_text.strip())
+        return await service.score_audio(raw_bytes, expected_text.strip(), language=language.strip())
 
     except ValueError as ve:
         raise HTTPException(status_code=status.HTTP_422_UNPROCESSABLE_ENTITY, detail=str(ve))

@@ -50,6 +50,7 @@ class PronunciationScoreResponse(BaseModel):
     prosody: Optional[ProsodyMetrics] = Field(default=None, description="Prosody metrics (pitch and energy)")
     processing_time_ms: float = Field(..., description="Server inference processing duration in milliseconds")
     backend_mode: str = Field(default="local", description="Backend execution mode ('local' or 'remote')")
+    language: str = Field(default="en-us", description="Language dialect used for phonetics ('en-us' or 'es')")
 
 
 class HealthStatusResponse(BaseModel):

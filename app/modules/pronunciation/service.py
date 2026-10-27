@@ -27,7 +27,7 @@ class BasePronunciationService(ABC):
     """Abstract interface defining the pronunciation scoring contract."""
 
     @abstractmethod
-    async def score_audio(self, audio_bytes: bytes, expected_text: str) -> PronunciationScoreResponse:
+    async def score_audio(self, audio_bytes: bytes, expected_text: str, language: str = "en-us") -> PronunciationScoreResponse:
         """Score spoken audio against reference text."""
         pass
 
@@ -83,10 +83,23 @@ class LocalPronunciationService(BasePronunciationService):
         except Exception as e:
             logger.warning(f"Engine pre-warm delayed: {e}. Model will load on first request.")
 
-    def _sync_analyze(self, audio_np: np.ndarray, expected_text: str):
+    def _sync_analyze(self, audio_np: np.ndarray, expected_text: str, language: str = "en-us"):
         """Pure synchronous function executed inside asyncio.to_thread."""
         engine = self._ensure_engine_initialized()
-        from .engine import prosody
+        from .engine import prosody, config
+
+        # Configure target language dialect if changed
+        norm_lang = "es" if language.lower().startswith("es") else "en-us"
+        current_cfg = config.get_config()
+        if current_cfg.espeak_language != norm_lang:
+            new_cfg = config.AnalyzerConfig(
+                model_name=current_cfg.model_name,
+                device=current_cfg.device,
+                espeak_language=norm_lang,
+                score_threshold=current_cfg.score_threshold,
+                good_mode=current_cfg.good_mode,
+            )
+            config.configure(new_cfg)
 
         # 1. Run core articulatory phoneme assessment
         result = engine.analyze(
@@ -99,14 +112,15 @@ class LocalPronunciationService(BasePronunciationService):
         prosody_info = prosody.extract_audio_prosody(audio_np, TARGET_SAMPLE_RATE)
         return result, prosody_info
 
-    async def score_audio(self, audio_bytes: bytes, expected_text: str) -> PronunciationScoreResponse:
+    async def score_audio(self, audio_bytes: bytes, expected_text: str, language: str = "en-us") -> PronunciationScoreResponse:
         t_start = time.perf_counter()
 
         # 1. Decode audio bytes into normalized 16 kHz float32 (in worker thread)
         audio_np, _ = await asyncio.to_thread(decode_audio_bytes, audio_bytes, TARGET_SAMPLE_RATE)
 
         # 2. Run ML inference in thread pool (PyTorch releases GIL during tensor ops)
-        result, prosody_info = await asyncio.to_thread(self._sync_analyze, audio_np, expected_text)
+        norm_lang = "es" if language.lower().startswith("es") else "en-us"
+        result, prosody_info = await asyncio.to_thread(self._sync_analyze, audio_np, expected_text, norm_lang)
 
         elapsed_ms = round((time.perf_counter() - t_start) * 1000.0, 1)
 
@@ -202,6 +216,7 @@ class LocalPronunciationService(BasePronunciationService):
             ),
             processing_time_ms=elapsed_ms,
             backend_mode="local",
+            language=norm_lang,
         )
 
 
@@ -219,7 +234,7 @@ class RemotePronunciationService(BasePronunciationService):
     def is_ready(self) -> bool:
         return bool(self.service_url)
 
-    async def score_audio(self, audio_bytes: bytes, expected_text: str) -> PronunciationScoreResponse:
+    async def score_audio(self, audio_bytes: bytes, expected_text: str, language: str = "en-us") -> PronunciationScoreResponse:
         t_start = time.perf_counter()
         url = f"{self.service_url}/api/v1/pronunciation/score"
         files = {"audio_file": ("audio.wav", io.BytesIO(audio_bytes), "audio/wav")}
