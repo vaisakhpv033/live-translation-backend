@@ -27,3 +27,10 @@ api_router.include_router(naaptol_order_confirmation.router, prefix="/naaptol-or
 api_router.include_router(autocoach.router, prefix="/autocoach", tags=["AutoCoach"])
 api_router.include_router(patients.router, prefix="/patients", tags=["Patients"])
 api_router.include_router(appointments.router, prefix="/appointments", tags=["Appointments"])
+
+# Pronunciation Assessment Module (conditionally mounted following Open/Closed Principle)
+from app.core.config import get_settings
+settings = get_settings()
+if getattr(settings, "ENABLE_PRONUNCIATION_ENGINE", True):
+    from app.modules.pronunciation.router import router as pronunciation_router
+    api_router.include_router(pronunciation_router)

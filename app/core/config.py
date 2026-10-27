@@ -64,6 +64,28 @@ class Settings(BaseSettings):
         description="API Key required in X-API-Key header to access patient endpoints"
     )
 
+    # Pronunciation Assessment Engine
+    ENABLE_PRONUNCIATION_ENGINE: bool = Field(
+        default=True,
+        description="Toggle to enable/disable the pronunciation engine module"
+    )
+    PRONUNCIATION_BACKEND: str = Field(
+        default="local",
+        description="Pronunciation engine mode: 'local' (in-process ML) or 'remote' (HTTP microservice)"
+    )
+    PRONUNCIATION_SERVICE_URL: str = Field(
+        default="",
+        description="URL of remote pronunciation service when PRONUNCIATION_BACKEND='remote'"
+    )
+    PRONUNCIATION_DEVICE: str = Field(
+        default="cpu",
+        description="Device for local ML inference: 'cpu' or 'cuda'"
+    )
+    PRONUNCIATION_MAX_THREADS: int = Field(
+        default=2,
+        description="Max CPU threads allocated to PyTorch for pronunciation inference"
+    )
+
     # CORS Settings
     ALLOWED_ORIGINS: str = "http://localhost:3000,http://127.0.0.1:3000"
 
