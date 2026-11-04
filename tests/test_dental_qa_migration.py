@@ -214,6 +214,14 @@ async def test_evaluation_service_routes_dental_to_new_engine():
         assert result_card["overall_score"] == 92
         mock_dental_eval.assert_called_once()
 
+        # Also verify 'first time appointment' routes to Dental QA Service
+        result_card_2, score_2 = await eval_service.evaluate_chat_history(
+            chat_history_str="User: Hello\nAssistant: Hi",
+            scenario="first time appointment",
+        )
+        assert score_2 == 92
+        assert mock_dental_eval.call_count == 2
+
 
 @pytest.mark.asyncio
 async def test_evaluation_service_preserves_legacy_for_sbi():
@@ -256,6 +264,11 @@ async def test_evaluation_service_preserves_legacy_for_sbi():
             # Dental QA Service must NOT have been called
             mock_dental_eval.assert_not_called()
             assert score == 85
+
+            # URL must call gemini-3.8-flash, NOT deprecated gemini-2.5-flash
+            called_url = mock_post.call_args[0][0]
+            assert "gemini-3.8-flash" in called_url
+            assert "gemini-2.5-flash" not in called_url
 
 
 # ──────────────────────────────────────────────────────────────

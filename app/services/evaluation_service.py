@@ -735,7 +735,24 @@ class GeminiEvaluationService(IEvaluationService):
             logger.error("Gemini API key not configured.")
             return None, 0
 
-        is_dental = bool(scenario and (scenario.startswith("dental") or "autocoach" in scenario.lower() or scenario == "custom_scenario"))
+        sc_lower = (scenario or "").strip().lower()
+        is_dental = bool(
+            sc_lower
+            and (
+                sc_lower.startswith("dental")
+                or "autocoach" in sc_lower
+                or "appointment" in sc_lower
+                or "first time" in sc_lower
+                or "first visit" in sc_lower
+                or "emergency" in sc_lower
+                or "citrus" in sc_lower
+                or "smiles" in sc_lower
+                or "tooth" in sc_lower
+                or "teeth" in sc_lower
+                or sc_lower == "custom_scenario"
+                or sc_lower not in SCENARIO_PROMPTS
+            )
+        )
         transcript = self._format_transcript(chat_history_str, is_dental=is_dental)
 
         if is_dental:
@@ -779,7 +796,7 @@ class GeminiEvaluationService(IEvaluationService):
                 }
                 return empty_card, 0
 
-            model_name = "gemini-2.5-flash" 
+            model_name = getattr(settings, "GEMINI_EVALUATION_MODEL", None) or "gemini-3.8-flash" 
             system_prompt = SCENARIO_PROMPTS.get(scenario or "sbi", SYSTEM_PROMPT_SBI)
             response_schema = GEMINI_QA_REPORT_SCHEMA
             generation_config = {
@@ -855,7 +872,7 @@ class GeminiEvaluationService(IEvaluationService):
         transcript = self._format_transcript_career(chat_history_str)
         prompt = f"{CAREER_EXTRACTION_SYSTEM_PROMPT}\n\nHere is the conversation transcript:\n{transcript}"
 
-        url = f"https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:generateContent?key={api_key}"
+        url = f"https://generativelanguage.googleapis.com/v1beta/models/gemini-3.8-flash:generateContent?key={api_key}"
         headers = {"Content-Type": "application/json"}
 
         payload = {
