@@ -9,6 +9,7 @@ __pycache__
 .dockerignore
 uv.lock
 .pytest_cache/
-sop_rules.json
+/sop_rules.json
 test_gemini_dental_eval.py 
 test_gemini.py
+/approved_protocols.md

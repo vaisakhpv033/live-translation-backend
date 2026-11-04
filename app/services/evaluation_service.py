@@ -739,16 +739,13 @@ class GeminiEvaluationService(IEvaluationService):
         transcript = self._format_transcript(chat_history_str, is_dental=is_dental)
 
         if is_dental:
-            model_name = settings.GEMINI_EVALUATION_MODEL
-            system_prompt = SCENARIO_PROMPTS.get(scenario, SYSTEM_PROMPT_DENTAL_COACH)
-            response_schema = GEMINI_DENTAL_QA_REPORT_SCHEMA
-            generation_config: dict[str, Any] = {
-                "responseMimeType": "application/json",
-                "responseSchema": response_schema,
-                "thinkingConfig": {
-                    "thinkingLevel": "high"
-                }
-            }
+            logger.info(f"Routing evaluation for dental scenario '{scenario}' to 2-Stage Multi-Call Dental QA Engine")
+            from app.modules.dental_qa.service import get_dental_qa_service
+            dental_service = get_dental_qa_service()
+            return await dental_service.evaluate_transcript_payload(
+                chat_history_str=chat_history_str,
+                scenario=scenario,
+            )
         else:
             model_name = "gemini-2.5-flash"
             system_prompt = SCENARIO_PROMPTS.get(scenario or "sbi", SYSTEM_PROMPT_SBI)

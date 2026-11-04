@@ -1,0 +1,107 @@
+{
+  "clinic_name": "Citrus Smiles Dental",
+  "location": "Heath, TX",
+  "lead_provider": "Dr. Mahima Gupta",
+  "office_manager": "Eman Majid",
+  "tier_1_hard_rules": [
+    {
+      "rule_id": "citrus_10_f_hours",
+      "section": "Practice Identification",
+      "title": "Operating Days & Schedule",
+      "is_hard_rule": true,
+      "rule_specification": "Open Monday, Tuesday, Thursday, Friday: 10:00 AM - 6:00 PM Central Time. Strictly CLOSED Wednesday, Saturday, and Sunday.",
+      "audit_guidance": "CRITICAL FAIL CHECK: Trainee must NEVER offer or book an appointment on Wednesday, Saturday, or Sunday. If patient requests a closed day, trainee must clearly state office is closed and offer Mon, Tue, Thu, or Fri."
+    },
+    {
+      "rule_id": "citrus_5_b_prepayment",
+      "section": "Financial & Payments",
+      "title": "No Phone Prepayment Collection",
+      "is_hard_rule": true,
+      "rule_specification": "Collect Pre-Payment Over Phone? NO. Overrides general practice prepayments.",
+      "audit_guidance": "CRITICAL FAIL CHECK: Trainee must NEVER ask for, demand, or collect credit card prepayment over the phone for Citrus Smiles."
+    },
+    {
+      "rule_id": "citrus_3_a_insurance",
+      "section": "Insurance Handling",
+      "title": "Insurance Acceptance & Doctor Order",
+      "is_hard_rule": true,
+      "rule_specification": "Accepts almost all PPOs and Medicaid. EXCLUDES HMO. Doctor Order: 'Do not go deep into insurance discussion as Dr ask to just book them and tell them we do accept your insurance and rest will be taken care by the Dr'.",
+      "audit_guidance": "Trainee must confirm PPO/Medicaid acceptance, screen out HMO, and avoid protracted insurance debates. Reassure caller and secure booking."
+    },
+    {
+      "rule_id": "citrus_6_b_cancellation",
+      "section": "Scheduling & Attendance",
+      "title": "48-Hour Cancellation Window",
+      "is_hard_rule": true,
+      "rule_specification": "Cancellation notice required is 48 business hours (not 24 hours).",
+      "audit_guidance": "When quoting cancellation requirements, trainee must cite 48 hours notice."
+    }
+  ],
+  "tier_2_trigger_rules": [
+    {
+      "rule_id": "citrus_1_b_provider",
+      "section": "Practice Identification",
+      "title": "Lead Provider Identity & Accolades",
+      "trigger_condition": "Patient inquires about the doctor, implant credentials, or provider identity.",
+      "rule_specification": "Dr. Mahima Gupta: Leading Implantologist in the US; awarded Best Dentist in Lancaster; top 6% in US.",
+      "audit_guidance": "Evaluate only if caller asks about provider or trainee uses accolades to build trust. Trainee must not invent another doctor name."
+    },
+    {
+      "rule_id": "citrus_10_a_location",
+      "section": "Practice Identification",
+      "title": "Practice Address & Landmark",
+      "trigger_condition": "Patient asks for location, directions, or during final closing recap.",
+      "rule_specification": "1629 Smirl Dr #101, Heath, TX 75032. Landmark: 'Just behind the standard service - Heath, next to CVS'.",
+      "audit_guidance": "Evaluate when caller asks for directions or during appointment confirmation recap."
+    },
+    {
+      "rule_id": "citrus_2_a_criteria",
+      "section": "Clinical Specialties",
+      "title": "Patient Age & Operatory Access",
+      "trigger_condition": "Caller asks about treating children or accompanying family members into operatory.",
+      "rule_specification": "Minimum patient age is 1 year old. Parents are allowed in operatory.",
+      "audit_guidance": "If parent asks if child (>= 1 yr) can be seen or if parent can accompany, trainee must answer Yes."
+    },
+    {
+      "rule_id": "citrus_4_c_promotions",
+      "section": "Clinical Specialties",
+      "title": "Special Promotion & Consultation Waiver",
+      "trigger_condition": "Caller inquires about implant pricing, consultation fee, or expresses hesitation due to cost.",
+      "rule_specification": "$1 Implant Consultation. If a caller is price shopping and hesitant, trainee is authorized to waive consult fee to secure booking.",
+      "audit_guidance": "Evaluate if caller asks about implant costs or balks at consultation fees."
+    },
+    {
+      "rule_id": "citrus_5_g_special_notes",
+      "section": "Open Dental Charting",
+      "title": "Implant Teeth Missing Note",
+      "trigger_condition": "Caller calls to inquire about or schedule an implant consultation.",
+      "rule_specification": "Trainee MUST ask how many teeth are missing, so it can be recorded under special note of appointment notes section in Open Dental.",
+      "audit_guidance": "During any implant inquiry, check if trainee actively asked how many teeth are missing."
+    },
+    {
+      "rule_id": "citrus_6_b_noshow_fee",
+      "section": "Scheduling & Attendance",
+      "title": "No-Show Fee",
+      "trigger_condition": "Caller inquires about late cancellation or missed appointment penalties.",
+      "rule_specification": "No-show fee is $50.00 per hour.",
+      "audit_guidance": "If asked about missed appointment charges, trainee must cite $50/hour."
+    },
+    {
+      "rule_id": "citrus_6_d_grace_period",
+      "section": "Scheduling & Attendance",
+      "title": "Late Arrival Grace Period",
+      "trigger_condition": "Caller asks what happens if they run late on appointment day.",
+      "rule_specification": "15-minute grace period before appointment may need to be rescheduled.",
+      "audit_guidance": "Quote 15-minute grace period if caller inquires about running late."
+    },
+    {
+      "rule_id": "citrus_6_c_reschedule_limit",
+      "section": "Scheduling & Attendance",
+      "title": "Rescheduling Limit",
+      "trigger_condition": "Caller is an existing patient asking to reschedule for multiple times.",
+      "rule_specification": "Maximum 2 free reschedules allowed. Further reschedules must be referred to clinic management.",
+      "audit_guidance": "Enforce maximum 2 free reschedules for appointment changes."
+    }
+  ]
+}
+

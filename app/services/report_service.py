@@ -118,6 +118,14 @@ class ReportService(IReportService):
             if report_card:
                 summary_json = json.dumps(report_card)
                 await self.repository.update_summary(job_id, summary_json, overall_score, "completed")
+
+                # If dental evaluation, dual-write to dental_evaluations table
+                if "sop_audit_table" in report_card or (scenario and (scenario.startswith("dental") or "autocoach" in scenario.lower())):
+                    try:
+                        await self.repository.save_dental_evaluation(job_id, report_card)
+                    except Exception as de_err:
+                        logger.error(f"Error persisting to dental_evaluations for job {job_id}: {de_err}")
+
                 logger.info(f"Evaluation completed for job {job_id}: score={overall_score}")
             else:
                 await self.repository.update_summary(job_id, None, 0, "failed")

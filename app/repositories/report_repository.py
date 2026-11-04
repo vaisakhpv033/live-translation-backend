@@ -51,6 +51,11 @@ class IReportRepository(ABC):
         """Updates the evaluation summary, score, and status for a report."""
         pass
 
+    @abstractmethod
+    async def save_dental_evaluation(self, job_id: str, payload: dict) -> None:
+        """Saves granular audit and scoring metrics to dental_evaluations table."""
+        pass
+
 
 class SQLAlchemyReportRepository(IReportRepository):
     """
@@ -181,6 +186,13 @@ class SQLAlchemyReportRepository(IReportRepository):
             report.summary = summary
             report.overall_score = overall_score
             report.status = status
+
+    async def save_dental_evaluation(self, job_id: str, payload: dict) -> None:
+        """Saves granular audit and scoring metrics to dental_evaluations table."""
+        logger.info(f"Saving granular dental evaluation for report: {job_id}")
+        from app.modules.dental_qa.service import get_dental_qa_service
+        dental_service = get_dental_qa_service()
+        await dental_service.persist_dental_evaluation(self.session, job_id, payload)
 
     @staticmethod
     def _row_to_dict(row: Report) -> dict:
