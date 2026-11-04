@@ -96,6 +96,19 @@ async def evaluate_dental_call(
         f"{behavioral_res.assessment_reasoning_justification}"
     )
 
+    # Map dynamic, evidence-based reasoning from Stage 1 & Stage 2 evaluators
+    dimension_explanations = {
+        "rapport": behavioral_res.rapport_professionalism.reason,
+        "discovery": behavioral_res.discovery_needs_analysis.reason,
+        "sop_adherence": sop_res.dental_sop_adherence_reason,
+        "communication": behavioral_res.communication_skills.reason,
+        "objection_handling": behavioral_res.objection_handling.reason,
+        "recommendation_quality": behavioral_res.recommendation_quality.reason,
+        "compliance": behavioral_res.compliance_ethical_conduct.reason,
+        "closing": behavioral_res.closing_effectiveness.reason,
+        "clinic_protocol_adherence": clinic_res.clinic_protocol_adherence_reason,
+    }
+
     # Assemble Final Report Card
     qualitative_analysis = QualitativeAnalysis(
         call_summary=behavioral_res.call_summary,
@@ -107,6 +120,7 @@ async def evaluate_dental_call(
         compliance_review_security=behavioral_res.compliance_review_security,
         coaching_recommendations=behavioral_res.coaching_recommendations,
         assessment_reasoning_justification=authoritative_justification,
+        dimension_explanations=dimension_explanations,
     )
 
     # Aggregate token metrics & costs across all 3 Gemini calls

@@ -144,6 +144,49 @@ def test_frontend_payload_structure():
     assert payload["sop_adherence_summary"]["overall_sop_verdict"] == "Fully Compliant"
 
 
+def test_frontend_payload_dynamic_dimension_explanations():
+    service = get_dental_qa_service()
+
+    report_card = DentalQAReportCard(
+        call_metadata=CallMetadata(job_id="test_job_dyn"),
+        scores=EvaluatedScores(
+            rapport_professionalism=8,
+            discovery_needs_analysis=7,
+            dental_sop_adherence=9,
+            communication_skills=8,
+            objection_handling=6,
+            recommendation_quality=8,
+            compliance_ethical_conduct=10,
+            closing_effectiveness=7,
+            clinic_protocol_adherence=2,
+            overall_score=65,
+            readiness_assessment="Developing",
+            clamping_applied=True,
+        ),
+        detailed_analysis=QualitativeAnalysis(
+            call_summary="Test call",
+            strengths=[],
+            improvement_opportunities=[],
+            missed_opportunities=[],
+            compliance_review_security=ComplianceSecurityReview(
+                pci_dss_prepayment="OK", hipaa_privacy="OK", security_credentials="OK"
+            ),
+            coaching_recommendations=[],
+            assessment_reasoning_justification="Test",
+            dimension_explanations={
+                "rapport": "Trainee warmly welcomed the caller and expressed empathy for the patient's toothache.",
+                "clinic_protocol_adherence": "Critical breach: Trainee offered an appointment on Wednesday when Citrus Smiles is closed.",
+            },
+        ),
+    )
+
+    payload = service.to_frontend_payload(report_card)
+    assert payload["rapport"]["reason"] == "Trainee warmly welcomed the caller and expressed empathy for the patient's toothache."
+    assert payload["clinic_protocol_adherence"]["reason"] == "Critical breach: Trainee offered an appointment on Wednesday when Citrus Smiles is closed."
+    # Unprovided dimension should gracefully fall back to the standard rubric description
+    assert "Diagnostic inquiry" in payload["discovery"]["reason"]
+
+
 # ──────────────────────────────────────────────────────────────
 #  3. Scenario Routing in GeminiEvaluationService
 # ──────────────────────────────────────────────────────────────

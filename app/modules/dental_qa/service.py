@@ -175,49 +175,51 @@ class DentalQAService:
             "clinic_violations_count": sum(1 for c in details.clinic_protocol_audits if (c.verdict or "").strip().lower() == "violated"),
         }
 
+        exp = getattr(details, "dimension_explanations", None) or {}
+
         # Frontend ReportCard structure matching DentalReportCard in reportService.ts
         payload: Dict[str, Any] = {
             "scenario_practiced": details.call_summary or f"Citrus Smiles Dental Simulation ({scenario})",
             "overall_score": scores.overall_score,
 
-            # 8 Core Criteria (1-10) with explanations
+            # 8 Core Criteria (1-10) with dynamic LLM explanations & evidence
             "rapport": {
                 "score": scores.rapport_professionalism,
-                "reason": "Warm greeting, empathy, identifying self & practice, patient comfort.",
+                "reason": exp.get("rapport") or "Warm greeting, empathy, identifying self & practice, patient comfort.",
             },
             "discovery": {
                 "score": scores.discovery_needs_analysis,
-                "reason": "Diagnostic inquiry into dental pain, symptoms, affected teeth, and history.",
+                "reason": exp.get("discovery") or "Diagnostic inquiry into dental pain, symptoms, affected teeth, and history.",
             },
             "sop_adherence": {
                 "score": scores.dental_sop_adherence,
-                "reason": f"Audit of 41 standard dental front-desk objection verbiages. Verdict: {overall_verdict}.",
+                "reason": exp.get("sop_adherence") or f"Audit of 41 standard dental front-desk objection verbiages. Verdict: {overall_verdict}.",
             },
             "communication": {
                 "score": scores.communication_skills,
-                "reason": "Clarity, active listening, conversational pacing, jargon-free explanations.",
+                "reason": exp.get("communication") or "Clarity, active listening, conversational pacing, jargon-free explanations.",
             },
             "objection_handling": {
                 "score": scores.objection_handling,
-                "reason": "Managing pricing, doctor availability, and appointment friction with empathy.",
+                "reason": exp.get("objection_handling") or "Managing pricing, doctor availability, and appointment friction with empathy.",
             },
             "recommendation_quality": {
                 "score": scores.recommendation_quality,
-                "reason": "Appropriate clinical scheduling, exam/scan recommendations, emergency prioritization.",
+                "reason": exp.get("recommendation_quality") or "Appropriate clinical scheduling, exam/scan recommendations, emergency prioritization.",
             },
             "compliance": {
                 "score": scores.compliance_ethical_conduct,
-                "reason": "HIPAA compliance, no medical diagnoses over phone, PCI-DSS prepayment adherence.",
+                "reason": exp.get("compliance") or "HIPAA compliance, no medical diagnoses over phone, PCI-DSS prepayment adherence.",
             },
             "closing": {
                 "score": scores.closing_effectiveness,
-                "reason": "Confirming appointment time, doctor, landmarks, cancellation policy, warm closing.",
+                "reason": exp.get("closing") or "Confirming appointment time, doctor, landmarks, cancellation policy, warm closing.",
             },
 
             # New Metric: Clinic Protocol Adherence (Citrus Smiles specific)
             "clinic_protocol_adherence": {
                 "score": scores.clinic_protocol_adherence,
-                "reason": "Strict compliance with Citrus Smiles operating days, lead provider, and payment policies.",
+                "reason": exp.get("clinic_protocol_adherence") or "Strict compliance with Citrus Smiles operating days, lead provider, and payment policies.",
             },
 
             # Qualitative Lists

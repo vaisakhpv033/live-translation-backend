@@ -46,6 +46,10 @@ class QualitativeAnalysis(BaseModel):
     compliance_review_security: ComplianceSecurityReview
     coaching_recommendations: List[str] = Field(default_factory=list)
     assessment_reasoning_justification: str
+    dimension_explanations: Dict[str, str] = Field(
+        default_factory=dict,
+        description="Dynamic LLM-generated evidence and reasoning for each scorecard dimension",
+    )
 
 
 class DentalQAReportCard(BaseModel):
