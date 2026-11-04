@@ -10,8 +10,10 @@ from typing import Optional
 
 from app.modules.dental_qa.schemas import (
     CallMetadata,
+    EvaluatedScores,
     QualitativeAnalysis,
     DentalQAReportCard,
+    ComplianceSecurityReview,
 )
 from .stage1a_sop_auditor import audit_dental_sops
 from .stage1b_clinic_auditor import audit_clinic_protocols
@@ -32,8 +34,77 @@ async def evaluate_dental_call(
     1. Parallel execution: Stage 1A (SOP Audit) & Stage 1B (Clinic Audit)
     2. Sequential execution: Stage 2 (Holistic Behavioral Evaluator)
     3. Deterministic execution: Stage 3 (Python Math & Clamping Engine)
+
+    Guards against empty/absent transcripts: returns a zeroed report card immediately
+    without making any LLM calls.
     """
     call_meta = metadata or CallMetadata(job_id="job_live_simulation")
+
+    # Guard: Detect empty or absent conversation transcript
+    cleaned_transcript = (transcript or "").strip()
+    if not cleaned_transcript or cleaned_transcript.lower() in {
+        "no transcript available.",
+        "no transcript available",
+        "no dialogue recorded in transcript.",
+        "no dialogue recorded in transcript",
+        "[]",
+        "{}",
+    }:
+        logger.warning(
+            f"No conversation dialogue in transcript for job: {call_meta.job_id}. "
+            "Skipping LLM evaluation calls and generating zeroed evaluation card."
+        )
+        no_data_reason = "No call data recorded. Evaluation cannot be performed because no conversation occurred."
+        return DentalQAReportCard(
+            call_metadata=call_meta,
+            scores=EvaluatedScores(
+                rapport_professionalism=0,
+                discovery_needs_analysis=0,
+                dental_sop_adherence=0,
+                communication_skills=0,
+                objection_handling=0,
+                recommendation_quality=0,
+                compliance_ethical_conduct=0,
+                closing_effectiveness=0,
+                clinic_protocol_adherence=0,
+                overall_score=0,
+                readiness_assessment="Not Ready",
+                clamping_applied=False,
+            ),
+            detailed_analysis=QualitativeAnalysis(
+                call_summary="No call data recorded. Call was disconnected or no conversation occurred, so evaluation cannot be done.",
+                dental_sop_verbiage_audits=[],
+                clinic_protocol_audits=[],
+                strengths=[],
+                improvement_opportunities=["Ensure audio and microphone are connected so dialogue can be recorded."],
+                missed_opportunities=[],
+                compliance_review_security=ComplianceSecurityReview(
+                    pci_dss_prepayment="Not evaluated: No call data recorded.",
+                    hipaa_privacy="Not evaluated: No call data recorded.",
+                    security_credentials="Not evaluated: No call data recorded.",
+                ),
+                coaching_recommendations=["Perform a test call to verify microphone audio before starting simulation."],
+                assessment_reasoning_justification="No call data available. The session contained no dialogue or audio transcript, so performance could not be evaluated.",
+                dimension_explanations={
+                    "rapport": no_data_reason,
+                    "discovery": no_data_reason,
+                    "sop_adherence": no_data_reason,
+                    "communication": no_data_reason,
+                    "objection_handling": no_data_reason,
+                    "recommendation_quality": no_data_reason,
+                    "compliance": no_data_reason,
+                    "closing": no_data_reason,
+                    "clinic_protocol_adherence": no_data_reason,
+                },
+            ),
+            token_usage={
+                "prompt_tokens": 0,
+                "candidates_tokens": 0,
+                "thoughts_tokens": 0,
+                "total_tokens": 0,
+                "total_cost_usd": 0.0,
+            },
+        )
 
     logger.info(f"Starting 2-Stage Multi-Call QA Evaluation for job: {call_meta.job_id}")
 

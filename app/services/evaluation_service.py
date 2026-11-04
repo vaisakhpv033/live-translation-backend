@@ -747,7 +747,39 @@ class GeminiEvaluationService(IEvaluationService):
                 scenario=scenario,
             )
         else:
-            model_name = "gemini-2.5-flash"
+            cleaned_transcript = (transcript or "").strip()
+            if not cleaned_transcript or cleaned_transcript.lower() in {
+                "no transcript available.",
+                "no transcript available",
+                "no dialogue recorded in transcript.",
+                "no dialogue recorded in transcript",
+                "[]",
+                "{}",
+            }:
+                logger.warning(f"No dialogue in transcript for legacy scenario '{scenario}'; skipping LLM evaluation.")
+                no_data_reason = "No call data recorded. Evaluation cannot be performed because no conversation occurred."
+                empty_card = {
+                    "scenario_practiced": "No call data recorded. Call was disconnected or no conversation occurred, so evaluation cannot be done.",
+                    "overall_score": 0,
+                    "readiness_assessment": "Not Ready",
+                    "readiness_reasoning": "No call data available. The session contained no dialogue or audio transcript, so performance could not be evaluated.",
+                    "rapport": {"score": 0, "reason": no_data_reason},
+                    "discovery": {"score": 0, "reason": no_data_reason},
+                    "product_knowledge": {"score": 0, "reason": no_data_reason},
+                    "communication": {"score": 0, "reason": no_data_reason},
+                    "objection_handling": {"score": 0, "reason": no_data_reason},
+                    "recommendation_quality": {"score": 0, "reason": no_data_reason},
+                    "compliance": {"score": 0, "reason": no_data_reason},
+                    "closing": {"score": 0, "reason": no_data_reason},
+                    "positives": [],
+                    "improvement_areas": ["Ensure audio and microphone are connected so conversation can be recorded."],
+                    "missed_opportunities": [],
+                    "compliance_issues": [],
+                    "coaching_recommendations": ["Perform a test call to verify audio recording before training."],
+                }
+                return empty_card, 0
+
+            model_name = "gemini-2.5-flash" 
             system_prompt = SCENARIO_PROMPTS.get(scenario or "sbi", SYSTEM_PROMPT_SBI)
             response_schema = GEMINI_QA_REPORT_SCHEMA
             generation_config = {

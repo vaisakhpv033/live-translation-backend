@@ -21,17 +21,17 @@ class CallMetadata(BaseModel):
 
 
 class EvaluatedScores(BaseModel):
-    rapport_professionalism: int = Field(ge=1, le=10)
-    discovery_needs_analysis: int = Field(ge=1, le=10)
-    dental_sop_adherence: int = Field(ge=1, le=10)
-    communication_skills: int = Field(ge=1, le=10)
-    objection_handling: int = Field(ge=1, le=10)
-    recommendation_quality: int = Field(ge=1, le=10)
-    compliance_ethical_conduct: int = Field(ge=1, le=10)
-    closing_effectiveness: int = Field(ge=1, le=10)
-    clinic_protocol_adherence: int = Field(ge=1, le=10)
+    rapport_professionalism: int = Field(ge=0, le=10)
+    discovery_needs_analysis: int = Field(ge=0, le=10)
+    dental_sop_adherence: int = Field(ge=0, le=10)
+    communication_skills: int = Field(ge=0, le=10)
+    objection_handling: int = Field(ge=0, le=10)
+    recommendation_quality: int = Field(ge=0, le=10)
+    compliance_ethical_conduct: int = Field(ge=0, le=10)
+    closing_effectiveness: int = Field(ge=0, le=10)
+    clinic_protocol_adherence: int = Field(ge=0, le=10)
 
-    overall_score: int = Field(ge=1, le=100, description="Programmatically computed weighted composite score")
+    overall_score: int = Field(ge=0, le=100, description="Programmatically computed weighted composite score")
     readiness_assessment: ReadinessTier = Field(description="Deterministic readiness tier")
     clamping_applied: bool = Field(default=False, description="Whether rule-based penalty clamping was triggered")
 

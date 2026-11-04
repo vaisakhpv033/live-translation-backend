@@ -297,3 +297,104 @@ async def test_report_service_dual_writes_for_dental():
         "job_dental_test_99", dental_payload
     )
 
+
+# ──────────────────────────────────────────────────────────────
+#  5. Empty Transcript Protection (Zero Scoring Guard)
+# ──────────────────────────────────────────────────────────────
+
+@pytest.mark.asyncio
+async def test_dental_empty_transcript_protection():
+    """
+    Verifies that when a call transcript contains no conversation dialogue,
+    the service bypasses LLM calls and returns a protected zero-valued report card.
+    """
+    service = get_dental_qa_service()
+
+    empty_inputs = [
+        None,
+        "",
+        "   ",
+        "{}",
+        "[]",
+        '{"items": []}',
+        '{"items": [{"role": "system", "text": "Session established"}]}',
+        '{"items": [{"role": "user", "text": ""}]}',
+        "No transcript available.",
+        "No dialogue recorded in transcript.",
+    ]
+
+    for empty_input in empty_inputs:
+        payload, score = await service.evaluate_transcript_payload(
+            chat_history_str=empty_input,
+            scenario="dental_scheduling",
+            job_id="job_empty_test",
+        )
+
+        assert score == 0, f"Expected score 0 for input {empty_input!r}"
+        assert payload is not None
+        assert payload["overall_score"] == 0
+        assert payload["readiness_assessment"] == "Not Ready"
+        assert "No call data recorded" in payload["scenario_practiced"]
+        assert "No call data available" in payload["readiness_reasoning"]
+
+        # All criteria scores must be 0
+        assert payload["rapport"]["score"] == 0
+        assert payload["discovery"]["score"] == 0
+        assert payload["sop_adherence"]["score"] == 0
+        assert payload["communication"]["score"] == 0
+        assert payload["objection_handling"]["score"] == 0
+        assert payload["recommendation_quality"]["score"] == 0
+        assert payload["compliance"]["score"] == 0
+        assert payload["closing"]["score"] == 0
+        assert payload["clinic_protocol_adherence"]["score"] == 0
+
+        # Reasons must indicate no call data
+        assert "No call data recorded" in payload["rapport"]["reason"]
+        assert "No call data recorded" in payload["clinic_protocol_adherence"]["reason"]
+
+        # Audit tables and tokens must be empty / zero
+        assert payload["sop_audit_table"] == []
+        assert payload["clinic_audit_table"] == []
+        assert payload["clamping_applied"] is False
+        assert payload["token_usage"]["total_tokens"] == 0
+        assert payload["token_usage"]["total_cost_usd"] == 0.0
+
+
+@pytest.mark.asyncio
+async def test_orchestrator_direct_empty_guard():
+    """
+    Verifies that calling evaluate_dental_call directly with an empty string
+    safely returns a zero-valued DentalQAReportCard without making LLM calls.
+    """
+    from app.modules.dental_qa.core.orchestrator import evaluate_dental_call
+
+    card = await evaluate_dental_call("")
+    assert card.scores.overall_score == 0
+    assert card.scores.rapport_professionalism == 0
+    assert card.scores.readiness_assessment == "Not Ready"
+    assert "No call data recorded" in card.detailed_analysis.call_summary
+    assert card.token_usage["total_tokens"] == 0
+
+
+@pytest.mark.asyncio
+async def test_legacy_empty_transcript_protection():
+    """
+    Verifies that legacy non-dental scenarios also guard against empty transcripts
+    and return zero-valued cards without calling Gemini.
+    """
+    eval_service = GeminiEvaluationService()
+
+    payload, score = await eval_service.evaluate_chat_history(
+        chat_history_str='{"items": []}',
+        scenario="sbi",
+    )
+
+    assert score == 0
+    assert payload is not None
+    assert payload["overall_score"] == 0
+    assert payload["readiness_assessment"] == "Not Ready"
+    assert "No call data recorded" in payload["scenario_practiced"]
+    assert payload["rapport"]["score"] == 0
+    assert payload["product_knowledge"]["score"] == 0
+
+

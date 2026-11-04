@@ -98,6 +98,103 @@ class DentalQAService:
             logger.warning(f"Error parsing chat history JSON for dental transcript: {e}")
             return chat_history_str
 
+    @staticmethod
+    def is_transcript_empty(transcript: Optional[str]) -> bool:
+        """Determines if a formatted transcript has no actual conversation dialogue."""
+        if not transcript:
+            return True
+        t = transcript.strip().lower()
+        if not t:
+            return True
+        return t in {
+            "no transcript available.",
+            "no transcript available",
+            "no dialogue recorded in transcript.",
+            "no dialogue recorded in transcript",
+            "[]",
+            "{}",
+        }
+
+    def create_empty_report_payload(
+        self,
+        scenario: str = "dental_scheduling",
+        job_id: Optional[str] = None,
+        patient_name: Optional[str] = None,
+        trainee_name: Optional[str] = None,
+    ) -> Dict[str, Any]:
+        """
+        Creates a protected zero-valued report card payload when a call contains
+        no audio or conversation transcript, preventing unnecessary LLM calls.
+        """
+        no_data_reason = "No call data recorded. Evaluation cannot be performed because no conversation occurred."
+        safe_job_id = job_id or f"job_{uuid.uuid4().hex[:8]}"
+
+        return {
+            "scenario_practiced": "No call data recorded. Call was disconnected or no conversation occurred, so evaluation cannot be done.",
+            "overall_score": 0,
+
+            # 8 Core Criteria (All 0s)
+            "rapport": {"score": 0, "reason": no_data_reason},
+            "discovery": {"score": 0, "reason": no_data_reason},
+            "sop_adherence": {"score": 0, "reason": no_data_reason},
+            "communication": {"score": 0, "reason": no_data_reason},
+            "objection_handling": {"score": 0, "reason": no_data_reason},
+            "recommendation_quality": {"score": 0, "reason": no_data_reason},
+            "compliance": {"score": 0, "reason": no_data_reason},
+            "closing": {"score": 0, "reason": no_data_reason},
+
+            # Clinic Protocol Adherence
+            "clinic_protocol_adherence": {"score": 0, "reason": no_data_reason},
+
+            # Qualitative Lists
+            "positives": [],
+            "improvement_areas": [
+                "Ensure microphone and audio stream are active so dialogue can be recorded.",
+                "Speak clearly into the microphone to initiate the conversation with the patient.",
+            ],
+            "missed_opportunities": [],
+            "compliance_issues": [],
+            "coaching_recommendations": [
+                "Verify microphone permissions and perform an audio test call before starting simulation."
+            ],
+            "compliance_review_security": {
+                "pci_dss_prepayment": "Not evaluated: No call data recorded.",
+                "hipaa_privacy": "Not evaluated: No call data recorded.",
+                "security_credentials": "Not evaluated: No call data recorded.",
+            },
+
+            # Readiness Tier & Narrative
+            "readiness_assessment": "Not Ready",
+            "readiness_reasoning": "No call data available. The session contained no dialogue or audio transcript, so performance could not be evaluated.",
+
+            # Empty Audit Tables
+            "sop_audit_table": [],
+            "clinic_audit_table": [],
+            "clamping_applied": False,
+            "sop_adherence_summary": {
+                "overall_sop_verdict": "Non-Compliant",
+                "sop_violations_count": 0,
+                "clinic_violations_count": 0,
+            },
+
+            # Metadata & Token Accounting (Zero tokens & $0.00 cost)
+            "call_metadata": {
+                "job_id": safe_job_id,
+                "clinic_name": "Citrus Smiles Dental",
+                "lead_provider": "Dr. Mahima Gupta",
+                "trainee_name": trainee_name or "Front Desk Trainee",
+                "patient_name": patient_name or "Dental Patient",
+                "call_duration_seconds": 0,
+            },
+            "token_usage": {
+                "prompt_tokens": 0,
+                "candidates_tokens": 0,
+                "thoughts_tokens": 0,
+                "total_tokens": 0,
+                "total_cost_usd": 0.0,
+            },
+        }
+
     async def evaluate_transcript_payload(
         self,
         chat_history_str: Optional[str],
@@ -109,11 +206,21 @@ class DentalQAService:
         """
         Executes the 2-Stage Multi-Call evaluation pipeline and returns
         (frontend_report_card_dict, overall_score).
+        Guards against empty transcripts by returning a zero-valued card immediately.
         """
         transcript = self.format_transcript(chat_history_str)
-        if not transcript or transcript == "No transcript available.":
-            logger.warning(f"Empty transcript for job {job_id}; evaluation aborted.")
-            return None, 0
+        if self.is_transcript_empty(transcript):
+            logger.warning(
+                f"No conversation dialogue in transcript for job {job_id}; "
+                "skipping LLM evaluation calls and returning zeroed evaluation report."
+            )
+            empty_payload = self.create_empty_report_payload(
+                scenario=scenario or "dental_scheduling",
+                job_id=job_id,
+                patient_name=patient_name,
+                trainee_name=trainee_name,
+            )
+            return empty_payload, 0
 
         metadata = CallMetadata(
             job_id=job_id or f"job_{uuid.uuid4().hex[:8]}",
