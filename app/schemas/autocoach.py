@@ -10,7 +10,15 @@ class AutoCoachSessionCreate(BaseModel):
     """
     scenario: Optional[str] = Field(
         default="dental_scheduling",
-        description="Dental training scenario (e.g. dental_scheduling, dental_emergency, dental_price_shopper, dental_insurance_verification, dental_implant_consult, dental_records_transfer)"
+        description="Dental training scenario (e.g. dental_scheduling, dental_emergency, dental_price_shopper, first time appointment)"
+    )
+    type: Optional[str] = Field(
+        default="",
+        description="Sub-type for dedicated custom scenarios (e.g. personal, family, or empty string for default)"
+    )
+    optional_data: Optional[Dict[str, Any]] = Field(
+        default=None,
+        description="Optional data dictionary with patient overrides and card details"
     )
     language: Optional[str] = Field(
         default="en-US",

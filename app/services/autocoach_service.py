@@ -154,6 +154,10 @@ class LiveKitAutoCoachService(IAutoCoachService):
             metadata["custom_instructions"] = session_in.custom_instructions
         if session_in.reports_webhook_url:
             metadata["reports_webhook_url"] = session_in.reports_webhook_url
+        if session_in.type is not None:
+            metadata["type"] = session_in.type
+        if session_in.optional_data is not None:
+            metadata["optional_data"] = session_in.optional_data
         if session_in.extra_metadata:
             metadata.update(session_in.extra_metadata)
 
