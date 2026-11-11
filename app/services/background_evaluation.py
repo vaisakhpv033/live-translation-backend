@@ -1,12 +1,46 @@
+import json
 import logging
 import asyncio
 from datetime import datetime, UTC
+from typing import Any, Optional
 from app.core import database as db
 from app.repositories.report_repository import SQLAlchemyReportRepository
 from app.services.evaluation_service import GeminiEvaluationService
 from app.services.report_service import ReportService
 
 logger = logging.getLogger("translation-agent-backend.services.background_evaluation")
+
+
+def extract_extra_metadata(
+    chat_history: Any,
+    explicit_extra_metadata: Optional[dict] = None,
+) -> Optional[dict]:
+    """
+    Resolves `extra_metadata` from explicit payload or embedded chat_history JSON.
+    Supports top-level `extra_metadata` (AutoCoach webhook) and nested
+    `metadata.extra_metadata` (generic report payloads).
+    """
+    if isinstance(explicit_extra_metadata, dict) and explicit_extra_metadata:
+        return explicit_extra_metadata
+
+    data = chat_history
+    if isinstance(data, str):
+        try:
+            data = json.loads(data)
+        except Exception:
+            return None
+
+    if isinstance(data, dict):
+        top_extra = data.get("extra_metadata")
+        if isinstance(top_extra, dict) and top_extra:
+            return top_extra
+        nested_meta = data.get("metadata")
+        if isinstance(nested_meta, dict):
+            nested_extra = nested_meta.get("extra_metadata")
+            if isinstance(nested_extra, dict) and nested_extra:
+                return nested_extra
+
+    return None
 
 
 def is_stuck(created_at_str: str | None, threshold_seconds: int) -> bool:
@@ -28,7 +62,10 @@ def is_stuck(created_at_str: str | None, threshold_seconds: int) -> bool:
 
 
 async def run_background_evaluation(
-    job_id: str, chat_history_str: str | None, scenario: str
+    job_id: str,
+    chat_history_str: str | None,
+    scenario: str,
+    extra_metadata: dict | None = None,
 ) -> None:
     """
     Standard background evaluation task runner.
@@ -38,13 +75,20 @@ async def run_background_evaluation(
         logger.error(f"Cannot run evaluation for job {job_id}: Database session factory is None.")
         return
 
+    resolved_extra = extract_extra_metadata(chat_history_str, extra_metadata)
+
     logger.info(f"Starting background evaluation task for job: {job_id} (scenario={scenario})")
     async with db._async_session_factory() as session:
         try:
             repository = SQLAlchemyReportRepository(session)
             evaluation_service = GeminiEvaluationService()
             report_service = ReportService(repository, evaluation_service)
-            await report_service.evaluate_and_update(job_id, chat_history_str, scenario)
+            await report_service.evaluate_and_update(
+                job_id,
+                chat_history_str,
+                scenario,
+                extra_metadata=resolved_extra,
+            )
             await session.commit()
         except Exception as e:
             await session.rollback()

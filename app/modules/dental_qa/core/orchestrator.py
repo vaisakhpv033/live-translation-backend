@@ -28,6 +28,7 @@ async def evaluate_dental_call(
     metadata: Optional[CallMetadata] = None,
     weights: Optional[dict] = None,
     model_name: Optional[str] = None,
+    extra_metadata: Optional[dict] = None,
 ) -> DentalQAReportCard:
     """
     Runs the complete 2-Stage Multi-Call evaluation pipeline:
@@ -155,6 +156,43 @@ async def evaluate_dental_call(
         f"({evaluated_scores.readiness_assessment})"
     )
 
+    # STAGE 4: Appointment Action Verification (only for cancel/reschedule simulation calls)
+    action_verdict = None
+    stage4_usage: dict = {}
+    call_type = str((extra_metadata or {}).get("call_type") or "").strip().lower()
+    raw_apt_num = (extra_metadata or {}).get("apt_num")
+    raw_pat_num = (extra_metadata or {}).get("pat_num")
+
+    from . import stage4_action_verifier
+    norm_apt_num = stage4_action_verifier._normalize_id(raw_apt_num)
+    norm_pat_num = stage4_action_verifier._normalize_id(raw_pat_num)
+
+    if call_type in ("cancel", "reschedule") and norm_apt_num is not None and norm_pat_num is not None:
+        logger.info(f"Dispatching Stage 4 Action Verification for {call_type}...")
+        token = stage4_action_verifier.last_stage4_usage.set(None)
+        try:
+            action_verdict = await stage4_action_verifier.verify_appointment_action(
+                transcript=transcript,
+                call_type=call_type,
+                extra_metadata=extra_metadata,
+                model_name=model_name,
+            )
+            stage4_usage = stage4_action_verifier.last_stage4_usage.get() or {}
+        except Exception as e:
+            logger.error(f"Stage 4 Action Verification failed: {e}", exc_info=True)
+            from app.modules.dental_qa.schemas.action_verification import AppointmentActionVerdict, TranscriptOutcome
+            action_verdict = AppointmentActionVerdict(
+                call_type=call_type,
+                verification_status="error",
+                original_apt_num=norm_apt_num,
+                original_pat_num=norm_pat_num,
+                transcript_outcome=TranscriptOutcome(summary=f"Extraction failed: {str(e)}"),
+                checks_failed=[f"stage4_error: {str(e)}"],
+                verification_summary=f"Stage 4 failed with error: {str(e)}",
+            )
+        finally:
+            stage4_action_verifier.last_stage4_usage.reset(token)
+
     # Harmonize Stage 2 narrative with Stage 3 deterministic math
     clamp_explanation = (
         " [Mandatory penalty clamping was enforced due to critical protocol violations.]"
@@ -194,21 +232,24 @@ async def evaluate_dental_call(
         dimension_explanations=dimension_explanations,
     )
 
-    # Aggregate token metrics & costs across all 3 Gemini calls
+    # Aggregate token metrics & costs across all executed Gemini calls
     p_tokens = (
         sop_usage.get("promptTokenCount", 0)
         + clinic_usage.get("promptTokenCount", 0)
         + behavioral_usage.get("promptTokenCount", 0)
+        + stage4_usage.get("promptTokenCount", 0)
     )
     c_tokens = (
         sop_usage.get("candidatesTokenCount", 0)
         + clinic_usage.get("candidatesTokenCount", 0)
         + behavioral_usage.get("candidatesTokenCount", 0)
+        + stage4_usage.get("candidatesTokenCount", 0)
     )
     t_tokens = (
         sop_usage.get("thoughtsTokenCount", 0)
         + clinic_usage.get("thoughtsTokenCount", 0)
         + behavioral_usage.get("thoughtsTokenCount", 0)
+        + stage4_usage.get("thoughtsTokenCount", 0)
     )
     cost_usd = round(
         ((p_tokens / 1_000_000.0) * 0.75) + (((c_tokens + t_tokens) / 1_000_000.0) * 3.75), 6
@@ -227,5 +268,6 @@ async def evaluate_dental_call(
         scores=evaluated_scores,
         detailed_analysis=qualitative_analysis,
         token_usage=token_usage_dict,
+        action_verification=action_verdict,
     )
 

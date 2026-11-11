@@ -14,7 +14,10 @@ from app.schemas.room import RoomResponse
 from app.schemas.token import TokenResponse
 from app.services.autocoach_service import IAutoCoachService
 from app.services.report_service import IReportService
-from app.services.background_evaluation import run_background_evaluation
+from app.services.background_evaluation import (
+    run_background_evaluation,
+    extract_extra_metadata,
+)
 from app.api.dependencies import get_autocoach_service, get_report_service
 
 logger = logging.getLogger("translation-agent-backend.api.v1.endpoints.autocoach")
@@ -186,9 +189,13 @@ async def receive_autocoach_report(
         if isinstance(raw_chat, list):
             chat_history_dict = {"items": raw_chat}
         elif isinstance(raw_chat, dict):
-            chat_history_dict = raw_chat
+            chat_history_dict = dict(raw_chat)
         else:
             chat_history_dict = None
+
+        extra_metadata = extract_extra_metadata(chat_history_dict, payload.extra_metadata)
+        if extra_metadata and isinstance(chat_history_dict, dict) and not chat_history_dict.get("extra_metadata"):
+            chat_history_dict["extra_metadata"] = extra_metadata
 
         adapted_report = ReportCreate(
             job_id=payload.job_id,
@@ -212,6 +219,7 @@ async def receive_autocoach_report(
             payload.job_id,
             chat_history_str,
             scenario,
+            extra_metadata=extra_metadata,
         )
 
         logger.info(
@@ -317,11 +325,14 @@ async def retry_autocoach_report_evaluation(
 
     # Schedule background re-evaluation with dental rubric
     scenario = result.get("scenario") or "dental_scheduling"
+    chat_history_raw = result.get("chat_history")
+    extra_metadata = extract_extra_metadata(chat_history_raw)
     background_tasks.add_task(
         run_background_evaluation,
         job_id,
-        result.get("chat_history"),
+        chat_history_raw,
         scenario,
+        extra_metadata=extra_metadata,
     )
 
     return {"status": "success", "message": f"Retry evaluation started for AutoCoach job {job_id}."}

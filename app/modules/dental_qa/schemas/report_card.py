@@ -7,6 +7,7 @@ from typing import List, Dict, Any, Optional
 from pydantic import BaseModel, Field
 from .audit import DentalSOPAuditItem, ClinicProtocolAuditItem
 from .evaluation import ComplianceSecurityReview
+from .action_verification import AppointmentActionVerdict
 
 ReadinessTier = str  # "Production Ready" | "Ready With Supervision" | "Developing" | "Needs Significant Coaching" | "Not Ready"
 
@@ -57,4 +58,5 @@ class DentalQAReportCard(BaseModel):
     scores: EvaluatedScores
     detailed_analysis: QualitativeAnalysis
     token_usage: Optional[Dict[str, Any]] = None
+    action_verification: Optional[AppointmentActionVerdict] = None  # Stage 4: Appointment Action Verification
 

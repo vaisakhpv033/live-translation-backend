@@ -702,7 +702,8 @@ class IEvaluationService(ABC):
     """
     @abstractmethod
     async def evaluate_chat_history(
-        self, chat_history_str: Optional[str], scenario: Optional[str] = "sbi"
+        self, chat_history_str: Optional[str], scenario: Optional[str] = "sbi",
+        extra_metadata: Optional[dict] = None,
     ) -> Tuple[Optional[dict], int]:
         """
         Evaluates a chat transcript and returns (report_card_dict, overall_score).
@@ -728,7 +729,8 @@ class GeminiEvaluationService(IEvaluationService):
     """
 
     async def evaluate_chat_history(
-        self, chat_history_str: Optional[str], scenario: Optional[str] = "sbi"
+        self, chat_history_str: Optional[str], scenario: Optional[str] = "sbi",
+        extra_metadata: Optional[dict] = None,
     ) -> Tuple[Optional[dict], int]:
         api_key = settings.GEMINI_API_KEY
         if not api_key:
@@ -762,6 +764,7 @@ class GeminiEvaluationService(IEvaluationService):
             return await dental_service.evaluate_transcript_payload(
                 chat_history_str=chat_history_str,
                 scenario=scenario,
+                extra_metadata=extra_metadata,
             )
         else:
             cleaned_transcript = (transcript or "").strip()

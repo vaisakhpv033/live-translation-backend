@@ -202,6 +202,7 @@ class DentalQAService:
         job_id: Optional[str] = None,
         patient_name: Optional[str] = None,
         trainee_name: Optional[str] = None,
+        extra_metadata: Optional[dict] = None,
     ) -> Tuple[Optional[Dict[str, Any]], int]:
         """
         Executes the 2-Stage Multi-Call evaluation pipeline and returns
@@ -234,6 +235,7 @@ class DentalQAService:
             report_card: DentalQAReportCard = await evaluate_dental_call(
                 transcript=transcript,
                 metadata=metadata,
+                extra_metadata=extra_metadata,
             )
 
             # Build harmonized frontend payload
@@ -351,6 +353,10 @@ class DentalQAService:
             "call_metadata": report_card.call_metadata.model_dump(),
             "token_usage": report_card.token_usage,
         }
+
+        # Stage 4: Appointment Action Verification (only for cancel/reschedule)
+        if report_card.action_verification:
+            payload["appointment_action_verification"] = report_card.action_verification.model_dump()
 
         return payload
 

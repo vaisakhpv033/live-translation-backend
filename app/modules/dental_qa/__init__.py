@@ -7,6 +7,7 @@ from .service import DentalQAService, get_dental_qa_service
 from .models import DentalCallEvaluation
 from .core.orchestrator import evaluate_dental_call
 from .core.stage3_scoring_engine import calculate_clamped_scores, DEFAULT_WEIGHTS
+from .core.stage4_action_verifier import verify_appointment_action
 from .schemas import (
     DentalQAReportCard,
     CallMetadata,
@@ -15,6 +16,10 @@ from .schemas import (
     DentalSOPAuditResponse,
     ClinicProtocolAuditResponse,
     BehavioralEvaluationResponse,
+    SuggestedSlot,
+    TranscriptOutcome,
+    SlotAvailabilityResult,
+    AppointmentActionVerdict,
 )
 
 __all__ = [
@@ -24,6 +29,7 @@ __all__ = [
     "evaluate_dental_call",
     "calculate_clamped_scores",
     "DEFAULT_WEIGHTS",
+    "verify_appointment_action",
     "DentalQAReportCard",
     "CallMetadata",
     "EvaluatedScores",
@@ -31,4 +37,8 @@ __all__ = [
     "DentalSOPAuditResponse",
     "ClinicProtocolAuditResponse",
     "BehavioralEvaluationResponse",
+    "SuggestedSlot",
+    "TranscriptOutcome",
+    "SlotAvailabilityResult",
+    "AppointmentActionVerdict",
 ]

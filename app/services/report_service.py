@@ -106,15 +106,26 @@ class ReportService(IReportService):
             "message": f"Report for job {payload.job_id} received. Evaluation will run in background.",
         }
 
-    async def evaluate_and_update(self, job_id: str, chat_history_str: Optional[str], scenario: Optional[str] = "sbi") -> None:
+    async def evaluate_and_update(
+        self,
+        job_id: str,
+        chat_history_str: Optional[str],
+        scenario: Optional[str] = "sbi",
+        extra_metadata: Optional[dict] = None,
+    ) -> None:
         """
         Background task: evaluate the chat history and update the report record.
         This method is designed to be called from FastAPI BackgroundTasks.
         """
         try:
-            report_card, overall_score = await self.evaluation_service.evaluate_chat_history(
-                chat_history_str, scenario=scenario
-            )
+            if extra_metadata is not None:
+                report_card, overall_score = await self.evaluation_service.evaluate_chat_history(
+                    chat_history_str, scenario=scenario, extra_metadata=extra_metadata
+                )
+            else:
+                report_card, overall_score = await self.evaluation_service.evaluate_chat_history(
+                    chat_history_str, scenario=scenario
+                )
             if report_card:
                 summary_json = json.dumps(report_card)
                 await self.repository.update_summary(job_id, summary_json, overall_score, "completed")

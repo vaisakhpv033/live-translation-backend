@@ -11,6 +11,12 @@ from .evaluation import (
     ComplianceSecurityReview,
     BehavioralEvaluationResponse,
 )
+from .action_verification import (
+    SuggestedSlot,
+    TranscriptOutcome,
+    SlotAvailabilityResult,
+    AppointmentActionVerdict,
+)
 from .report_card import (
     CallMetadata,
     EvaluatedScores,
@@ -27,6 +33,10 @@ __all__ = [
     "DimensionScore",
     "ComplianceSecurityReview",
     "BehavioralEvaluationResponse",
+    "SuggestedSlot",
+    "TranscriptOutcome",
+    "SlotAvailabilityResult",
+    "AppointmentActionVerdict",
     "CallMetadata",
     "EvaluatedScores",
     "QualitativeAnalysis",

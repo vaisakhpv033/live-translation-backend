@@ -3,7 +3,10 @@ from fastapi import APIRouter, Depends, HTTPException, BackgroundTasks, status, 
 from app.schemas.report import ReportCreate, ReportDetail, ReportListResponse
 from app.services.report_service import IReportService
 from app.api.dependencies import get_report_service
-from app.services.background_evaluation import run_background_evaluation
+from app.services.background_evaluation import (
+    run_background_evaluation,
+    extract_extra_metadata,
+)
 
 router = APIRouter()
 
@@ -23,6 +26,7 @@ async def receive_report(
 
         # Schedule background evaluation
         chat_history_str = None
+        extra_metadata = extract_extra_metadata(payload.chat_history)
         if payload.chat_history:
             chat_history_str = json.dumps(payload.chat_history)
 
@@ -31,6 +35,7 @@ async def receive_report(
             payload.job_id,
             chat_history_str,
             payload.scenario or "sbi",
+            extra_metadata=extra_metadata,
         )
 
         return result
@@ -113,11 +118,14 @@ async def retry_report_evaluation(
         )
 
     # Schedule background re-evaluation
+    chat_history_raw = result.get("chat_history")
+    extra_metadata = extract_extra_metadata(chat_history_raw)
     background_tasks.add_task(
         run_background_evaluation,
         job_id,
-        result.get("chat_history"),
+        chat_history_raw,
         result.get("scenario", "sbi"),
+        extra_metadata=extra_metadata,
     )
 
     return {"status": "success", "message": f"Retry evaluation started for job {job_id}."}
