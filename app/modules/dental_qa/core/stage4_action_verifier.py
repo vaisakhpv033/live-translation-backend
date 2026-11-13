@@ -272,8 +272,8 @@ async def extract_transcript_outcome_with_usage(
         raise ValueError("GEMINI_API_KEY is not configured.")
 
     model = model_name or qa_settings.GEMINI_MODEL
-    # Keep per-attempt timeout bounded so retries cannot exceed background stuck threshold
-    http_timeout = timeout or min(qa_settings.HTTP_TIMEOUT_SECONDS, 45.0)
+    # Match other stages timeout (120s) so thinking & long calls do not cause socket ReadTimeout
+    http_timeout = timeout or qa_settings.HTTP_TIMEOUT_SECONDS
 
     today_str = _clinic_today_str()
     apt_datetime = extra_metadata.get("pre_call_apt_datetime") or "unknown"
@@ -318,7 +318,7 @@ EXTRACTION RULES:
             "responseMimeType": "application/json",
             "responseSchema": TRANSCRIPT_OUTCOME_SCHEMA,
             "thinkingConfig": {
-                "thinkingLevel": qa_settings.GEMINI_THINKING_LEVEL,
+                "thinkingLevel": "low",
             },
         },
     }
