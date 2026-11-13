@@ -4,8 +4,16 @@ Validates that appointment cancellations and reschedules performed during a trai
 align with real Open Dental data (slot availability, patient identity, appointment reference).
 """
 
-from typing import Optional
-from pydantic import BaseModel, Field
+from typing import Any, Optional
+import re
+from pydantic import BaseModel, Field, field_validator
+
+_TIME_PATTERN = re.compile(
+    r"\b((?:[01]?\d|2[0-3]):[0-5]\d(?::[0-5]\d)?(?:\s*[AaPp][Mm])?|[1-9]\s*[AaPp][Mm])\b"
+)
+_DATE_PATTERN = re.compile(
+    r"\b(\d{4}[-/]\d{2}[-/]\d{2}|\d{2}[-/]\d{2}[-/]\d{4})\b"
+)
 
 
 class SuggestedSlot(BaseModel):
@@ -14,6 +22,42 @@ class SuggestedSlot(BaseModel):
     time: Optional[str] = Field(default=None, description="Suggested time in HH:MM format")
     provider: Optional[str] = Field(default=None, description="Provider name, e.g. 'Dr. Gupta'")
     raw_text: str = Field(default="", description="Exact quote from the transcript where the slot was mentioned")
+
+    @field_validator("time", mode="before")
+    @classmethod
+    def sanitize_time(cls, v: Any) -> Optional[str]:
+        if not v or not isinstance(v, str):
+            return None
+        cleaned = v.strip()
+        if not cleaned or cleaned.lower() in ("null", "none", "unknown"):
+            return None
+        m = _TIME_PATTERN.search(cleaned)
+        if m:
+            return m.group(1).strip()
+        return cleaned
+
+    @field_validator("date", mode="before")
+    @classmethod
+    def sanitize_date(cls, v: Any) -> Optional[str]:
+        if not v or not isinstance(v, str):
+            return None
+        cleaned = v.strip()
+        if not cleaned or cleaned.lower() in ("null", "none", "unknown"):
+            return None
+        m = _DATE_PATTERN.search(cleaned)
+        if m:
+            return m.group(1).strip()
+        return cleaned
+
+    @field_validator("provider", mode="before")
+    @classmethod
+    def sanitize_provider(cls, v: Any) -> Optional[str]:
+        if not v or not isinstance(v, str):
+            return None
+        cleaned = v.strip()
+        if cleaned.lower() in ("null", "none", "provider: null", "unspecified", "n/a", ""):
+            return None
+        return cleaned
 
 
 class TranscriptOutcome(BaseModel):

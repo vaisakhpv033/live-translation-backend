@@ -12,6 +12,7 @@ import asyncio
 from contextvars import ContextVar
 import json
 import logging
+import re
 from datetime import UTC, date, datetime, time
 from typing import Any, Optional
 from zoneinfo import ZoneInfo, ZoneInfoNotFoundError
@@ -39,17 +40,19 @@ _SUGGESTED_SLOT_SCHEMA = {
         "date": {
             "type": "STRING",
             "nullable": True,
-            "description": "Suggested date normalized to YYYY-MM-DD, or null if not stated or indeterminable.",
+            "pattern": r"^\d{4}-\d{2}-\d{2}$",
+            "description": "Suggested date normalized to YYYY-MM-DD, or null if not stated or indeterminable. MUST contain ONLY YYYY-MM-DD or null with no extra words.",
         },
         "time": {
             "type": "STRING",
             "nullable": True,
-            "description": "Suggested time normalized to 24-hour HH:MM (e.g. '14:30'), or null if not stated.",
+            "pattern": r"^(?:0?[0-9]|1[0-9]|2[0-3]):[0-5]\d$",
+            "description": "Suggested time normalized to 24-hour HH:MM (e.g. '14:30'), or null if not stated. MUST contain ONLY the clean HH:MM string or null. NEVER include commentary, questions, or reasoning.",
         },
         "provider": {
             "type": "STRING",
             "nullable": True,
-            "description": "Doctor/provider name mentioned for this slot, or null.",
+            "description": "Doctor/provider name mentioned for this slot, or null if not stated.",
         },
         "raw_text": {
             "type": "STRING",
@@ -199,6 +202,11 @@ def _parse_date(date_str: Optional[str]) -> Optional[date]:
     return None
 
 
+_TIME_PATTERN = re.compile(
+    r"\b((?:[01]?\d|2[0-3]):[0-5]\d(?::[0-5]\d)?(?:\s*[AaPp][Mm])?|[1-9]\s*[AaPp][Mm])\b"
+)
+
+
 def _parse_time(time_str: Optional[str]) -> Optional[time]:
     """Parses '09:00', '09:00:00', '9:00 AM', '2:30 pm', or '2 PM' into a time object."""
     if not time_str or not isinstance(time_str, str):
@@ -211,6 +219,15 @@ def _parse_time(time_str: Optional[str]) -> Optional[time]:
             return datetime.strptime(cleaned, fmt).time().replace(second=0, microsecond=0)
         except ValueError:
             continue
+    # Robust fallback: extract time substring if extraneous words or model reasoning was attached
+    m = _TIME_PATTERN.search(cleaned)
+    if m:
+        sub = m.group(1).strip()
+        for fmt in ("%H:%M:%S", "%H:%M", "%I:%M:%S %p", "%I:%M %p", "%I %p", "%I:%M%p", "%I%p"):
+            try:
+                return datetime.strptime(sub, fmt).time().replace(second=0, microsecond=0)
+            except ValueError:
+                continue
     return None
 
 
@@ -278,7 +295,11 @@ CALL CONTEXT:
 - Clinic Num: {clinic_num}
 
 EXTRACTION RULES:
-- `slots_suggested`: List EVERY new appointment date/time slot the Front Desk Trainee offered to the patient during a reschedule call. Normalize `date` to `YYYY-MM-DD` (using Reference Current Date / Original Appointment Date for year context if needed, or null if not stated) and `time` to 24-hour `HH:MM` (e.g. `2:30 PM` -> `14:30`), and quote the exact phrase in `raw_text`.
+- CRITICAL: Return clean, exact values ONLY. Do NOT output internal thoughts, questions, schema discussions, commentary, or notes inside JSON string fields.
+- `time`: MUST contain ONLY a clean 24-hour 'HH:MM' string (e.g. '14:30' or '16:00') or null. NEVER add extra text, commentary, or provider remarks into `time`.
+- `date`: MUST contain ONLY 'YYYY-MM-DD' or null.
+- `provider`: Stated doctor name, or null if unmentioned (do NOT write 'null' as a string).
+- `slots_suggested`: List EVERY new appointment date/time slot the Front Desk Trainee offered to the patient during a reschedule call. Quote the exact phrase in `raw_text`.
 - `final_agreed_slot`: Set ONLY if both parties clearly agreed on a specific new slot (both date and time); otherwise null.
 - `cancellation_confirmed`: True ONLY if cancellation was clearly agreed/confirmed during a cancel call.
 - `correct_patient_verified`: True if the trainee verified caller identity (name, DOB, or explicit patient confirmation).

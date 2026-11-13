@@ -69,6 +69,33 @@ def test_parse_time_variants():
     assert _parse_time("9:15 AM") == time(9, 15)
     assert _parse_time("2:30 pm") == time(14, 30)
     assert _parse_time("not-a-time") is None
+    # Model reasoning / commentary leakage recovery
+    leaked_1 = "16:00 production/provider null if not mentioned? Yes provider: null, check schema: provider can be string or null provider: null. Let's make it standard: provider: null, time: 16:00"
+    leaked_2 = "11:30 production/provider null provider: null"
+    assert _parse_time(leaked_1) == time(16, 0)
+    assert _parse_time(leaked_2) == time(11, 30)
+
+
+def test_suggested_slot_sanitizes_leaked_reasoning_and_null_provider():
+    slot1 = SuggestedSlot(
+        date="2026-11-16",
+        time="16:00 production/provider null if not mentioned? Yes provider: null, check schema: provider can be string or null provider: null. Let's make it standard: provider: null, time: 16:00",
+        provider="null",
+        raw_text="next Monday, 4:00 p.m.",
+    )
+    assert slot1.time == "16:00"
+    assert slot1.provider is None
+    assert slot1.date == "2026-11-16"
+
+    slot2 = SuggestedSlot(
+        date="2026-11-19",
+        time="11:30 production/provider null provider: null",
+        provider="Dr. Smith",
+        raw_text="11:30 a.m. slot on Thursday",
+    )
+    assert slot2.time == "11:30"
+    assert slot2.provider == "Dr. Smith"
+    assert slot2.date == "2026-11-19"
 
 
 def test_slot_matches_window_boundaries_and_scoping():
