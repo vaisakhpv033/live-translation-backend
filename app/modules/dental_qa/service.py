@@ -85,7 +85,12 @@ class DentalQAService:
                     continue
 
                 # Role attribution: Trainee vs Patient
-                if role in ["user", "trainee", "human", "agent"]:
+                speaker_val = (item.get("speaker") or "").strip().lower()
+                if speaker_val in ["trainee", "front desk trainee", "agent", "user"]:
+                    speaker = "Front Desk Trainee"
+                elif speaker_val in ["customer", "patient", "caller", "simulator"]:
+                    speaker = "Patient"
+                elif role in ["user", "trainee", "human", "agent"]:
                     speaker = "Front Desk Trainee"
                 else:
                     speaker = "Patient"

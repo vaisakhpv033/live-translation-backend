@@ -142,8 +142,10 @@ class SQLAlchemyReportRepository(IReportRepository):
     def _is_autocoach_condition():
         return or_(
             func.coalesce(Report.agent_type, "") == "AutoCoach STS",
+            func.coalesce(Report.agent_type, "") == "SOS Live Copilot",
             func.coalesce(Report.scenario, "").like("dental_%"),
             func.coalesce(Report.room, "").like("DENTAL-%"),
+            func.coalesce(Report.room, "").like("sos-call-%"),
         )
 
     async def get_autocoach_reports(self) -> List[dict]:

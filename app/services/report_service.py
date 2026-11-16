@@ -152,9 +152,10 @@ class ReportService(IReportService):
         scenario = (r.get("scenario") or "").strip()
         room = (r.get("room") or "").strip()
         return (
-            agent_type == "AutoCoach STS"
+            agent_type in ("AutoCoach STS", "SOS Live Copilot")
             or scenario.startswith("dental_")
             or room.startswith("DENTAL-")
+            or room.startswith("sos-call-")
         )
 
     def _build_list_response(self, rows: List[dict]) -> ReportListResponse:

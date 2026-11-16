@@ -129,3 +129,18 @@ class AutoCoachReportPayload(BaseModel):
     extra_metadata: Optional[Dict[str, Any]] = Field(default=None, description="Additional context metadata")
     scenario: Optional[str] = Field(default=None, description="Explicit scenario name fallback")
     customer_name: Optional[str] = Field(default=None, description="Patient name fallback")
+
+
+class LiveCallReportPayload(AutoCoachReportPayload):
+    """
+    Payload received from SOS Live Copilot upon live consultation call conclusion.
+    Contains un-truncated transcript, live alert ledger, token metrics, and talk times.
+    """
+    call_type: Optional[str] = Field(default="live-call", description="Call type discriminator: 'live-call'")
+    agent_type: Optional[str] = Field(default="SOS Live Copilot", description="Agent type: 'SOS Live Copilot'")
+    clinic_id: Optional[str] = Field(default="citrus_smiles", description="Clinic identifier")
+    customer: Optional[Dict[str, Any]] = Field(default=None, description="Customer / patient details")
+    token_metrics: Optional[Dict[str, Any]] = Field(default=None, description="Live STT, copilot, and compliance token usage")
+    alert_ledger: Optional[Dict[str, Any]] = Field(default=None, description="Summary of live compliance alerts and resolutions")
+    caller_context: Optional[Dict[str, Any]] = Field(default=None, description="Extracted dental clinical slots")
+    talk_time: Optional[Dict[str, Any]] = Field(default=None, description="Talk duration and percentage metrics")

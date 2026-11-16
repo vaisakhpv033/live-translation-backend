@@ -8,6 +8,7 @@ from app.schemas.autocoach import (
     AutoCoachSessionResponse,
     AutoCoachTokenRequest,
     AutoCoachReportPayload,
+    LiveCallReportPayload,
 )
 from app.schemas.report import ReportCreate, ReportDetail, ReportListResponse
 from app.schemas.room import RoomResponse
@@ -233,6 +234,106 @@ async def receive_autocoach_report(
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
             detail=f"Failed to process AutoCoach report: {str(e)}",
+        )
+
+
+@router.post(
+    "/live-reports",
+    status_code=status.HTTP_201_CREATED,
+    summary="Receive SOS Dental Live Copilot Consultation Report and Trigger Background Evaluation",
+)
+async def receive_live_call_report(
+    payload: LiveCallReportPayload,
+    background_tasks: BackgroundTasks,
+    report_service: IReportService = Depends(get_report_service),
+):
+    """
+    Receives call conclusion telemetry and un-truncated chat transcript from the SOS Live Copilot worker.
+    Stores the live consultation record in PostgreSQL and dispatches the background Gemini 3-stage evaluation
+    using the Citrus Smiles Dental SOP rubric and clinic rules.
+    """
+    try:
+        trainee_data = payload.trainee or {}
+        customer_data = payload.customer or {}
+
+        scenario = payload.scenario or "dental_live_call"
+        patient_name = (
+            customer_data.get("patient_name")
+            or customer_data.get("name")
+            or payload.customer_name
+            or "Dental Patient"
+        )
+        sales_rep = (
+            trainee_data.get("trainee_name")
+            or trainee_data.get("name")
+            or "Front Desk Trainee"
+        )
+
+        room_id = payload.room_id or payload.room_name or payload.job_id
+        room_name = payload.room_name or payload.room_id or "sos-call-dental"
+
+        # Adapt chat history to dict structure if sent as a list
+        raw_chat = payload.chat_history
+        if isinstance(raw_chat, list):
+            chat_history_dict = {"items": raw_chat}
+        elif isinstance(raw_chat, dict):
+            chat_history_dict = dict(raw_chat)
+        else:
+            chat_history_dict = None
+
+        # Build extra_metadata enriched with live-call telemetry
+        extra_meta = dict(payload.extra_metadata or {})
+        extra_meta["call_type"] = payload.call_type or "live-call"
+        if payload.token_metrics:
+            extra_meta["token_metrics"] = payload.token_metrics
+        if payload.alert_ledger:
+            extra_meta["alert_ledger"] = payload.alert_ledger
+        if payload.caller_context:
+            extra_meta["caller_context"] = payload.caller_context
+        if payload.talk_time:
+            extra_meta["talk_time"] = payload.talk_time
+        if payload.clinic_id:
+            extra_meta["clinic_id"] = payload.clinic_id
+
+        if chat_history_dict is not None and not chat_history_dict.get("extra_metadata"):
+            chat_history_dict["extra_metadata"] = extra_meta
+
+        adapted_report = ReportCreate(
+            job_id=payload.job_id,
+            room_id=room_id,
+            room=room_name,
+            started_at=payload.started_at,
+            ended_at=payload.ended_at,
+            customer_name=patient_name,
+            agent_type=payload.agent_type or "SOS Live Copilot",
+            sales_rep=sales_rep,
+            scenario=scenario,
+            chat_history=chat_history_dict,
+        )
+
+        result = await report_service.receive_report(adapted_report)
+
+        # Trigger background evaluation with 3-Stage Dental Front Desk SOP & Clinic Rubric
+        chat_history_str = json.dumps(chat_history_dict) if chat_history_dict else None
+        background_tasks.add_task(
+            run_background_evaluation,
+            payload.job_id,
+            chat_history_str,
+            scenario,
+            extra_metadata=extra_meta,
+        )
+
+        logger.info(
+            f"SOS Live Copilot report for job {payload.job_id} (room={room_name}) received. "
+            "Background 3-stage evaluation scheduled."
+        )
+        return result
+
+    except Exception as e:
+        logger.exception(f"Failed to receive SOS Live Copilot report for job {payload.job_id}: {e}")
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail=f"Failed to process SOS Live Copilot report: {str(e)}",
         )
 
 
