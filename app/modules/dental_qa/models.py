@@ -37,6 +37,7 @@ class DentalCallEvaluation(Base):
     call_summary = Column(Text, nullable=True)
     sop_audit_table = Column(Text, nullable=True)
     clinic_audit_table = Column(Text, nullable=True)
+    voice_rating_audit = Column(Text, nullable=True)
     strengths = Column(Text, nullable=True)
     improvement_opportunities = Column(Text, nullable=True)
     missed_opportunities = Column(Text, nullable=True)

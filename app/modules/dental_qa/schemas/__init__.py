@@ -23,6 +23,14 @@ from .report_card import (
     QualitativeAnalysis,
     DentalQAReportCard,
 )
+from .voice_rating import (
+    VoiceVerdict,
+    VoiceRatingParameterItem,
+    VoiceRatingSessionBlock,
+    VoiceRatingAuditResponse,
+    Stage1CBlocksABCDRawResponse,
+    Stage1CBlockERawResponse,
+)
 
 __all__ = [
     "AuditVerdict",
@@ -41,5 +49,11 @@ __all__ = [
     "EvaluatedScores",
     "QualitativeAnalysis",
     "DentalQAReportCard",
+    "VoiceVerdict",
+    "VoiceRatingParameterItem",
+    "VoiceRatingSessionBlock",
+    "VoiceRatingAuditResponse",
+    "Stage1CBlocksABCDRawResponse",
+    "Stage1CBlockERawResponse",
 ]
 

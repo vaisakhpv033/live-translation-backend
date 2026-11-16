@@ -8,6 +8,7 @@ from pydantic import BaseModel, Field
 from .audit import DentalSOPAuditItem, ClinicProtocolAuditItem
 from .evaluation import ComplianceSecurityReview
 from .action_verification import AppointmentActionVerdict
+from .voice_rating import VoiceRatingAuditResponse
 
 ReadinessTier = str  # "Production Ready" | "Ready With Supervision" | "Developing" | "Needs Significant Coaching" | "Not Ready"
 
@@ -59,4 +60,5 @@ class DentalQAReportCard(BaseModel):
     detailed_analysis: QualitativeAnalysis
     token_usage: Optional[Dict[str, Any]] = None
     action_verification: Optional[AppointmentActionVerdict] = None  # Stage 4: Appointment Action Verification
+    voice_rating: Optional[VoiceRatingAuditResponse] = None  # Stage 1C: Voice Rating Parameters (IRA SOP)
 

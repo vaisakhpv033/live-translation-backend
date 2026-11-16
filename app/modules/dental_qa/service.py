@@ -175,6 +175,7 @@ class DentalQAService:
             # Empty Audit Tables
             "sop_audit_table": [],
             "clinic_audit_table": [],
+            "voice_rating": None,
             "clamping_applied": False,
             "sop_adherence_summary": {
                 "overall_sop_verdict": "Non-Compliant",
@@ -359,6 +360,10 @@ class DentalQAService:
             "token_usage": report_card.token_usage,
         }
 
+        # Stage 1C: Voice Rating Parameters (IRA SOP)
+        if report_card.voice_rating:
+            payload["voice_rating"] = report_card.voice_rating.model_dump()
+
         # Stage 4: Appointment Action Verification (only for cancel/reschedule)
         if report_card.action_verification:
             payload["appointment_action_verification"] = report_card.action_verification.model_dump()
@@ -403,6 +408,7 @@ class DentalQAService:
                 call_summary=scores_dict.get("scenario_practiced"),
                 sop_audit_table=json.dumps(scores_dict.get("sop_audit_table", [])),
                 clinic_audit_table=json.dumps(scores_dict.get("clinic_audit_table", [])),
+                voice_rating_audit=json.dumps(scores_dict.get("voice_rating")) if scores_dict.get("voice_rating") else None,
                 strengths=json.dumps(scores_dict.get("positives", [])),
                 improvement_opportunities=json.dumps(scores_dict.get("improvement_areas", [])),
                 missed_opportunities=json.dumps(scores_dict.get("missed_opportunities", [])),
@@ -436,6 +442,7 @@ class DentalQAService:
                     "call_summary": stmt.excluded.call_summary,
                     "sop_audit_table": stmt.excluded.sop_audit_table,
                     "clinic_audit_table": stmt.excluded.clinic_audit_table,
+                    "voice_rating_audit": stmt.excluded.voice_rating_audit,
                     "strengths": stmt.excluded.strengths,
                     "improvement_opportunities": stmt.excluded.improvement_opportunities,
                     "missed_opportunities": stmt.excluded.missed_opportunities,

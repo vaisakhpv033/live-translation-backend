@@ -1,6 +1,7 @@
 import logging
 from sqlalchemy.ext.asyncio import create_async_engine, async_sessionmaker, AsyncSession, AsyncEngine
 from sqlalchemy.orm import DeclarativeBase
+from sqlalchemy import text
 
 logger = logging.getLogger("translation-agent-backend.core.database")
 
@@ -37,6 +38,10 @@ async def init_db(database_url: str) -> None:
     from app.modules.dental_qa.models import DentalCallEvaluation  # noqa: F401
     async with _engine.begin() as conn:
         await conn.run_sync(Base.metadata.create_all)
+        try:
+            await conn.execute(text("ALTER TABLE dental_evaluations ADD COLUMN IF NOT EXISTS voice_rating_audit TEXT;"))
+        except Exception as e:
+            logger.debug(f"Column migration check note for voice_rating_audit: {e}")
     logger.info("Database tables created successfully.")
 
 

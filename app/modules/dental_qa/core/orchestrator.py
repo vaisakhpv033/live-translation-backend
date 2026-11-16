@@ -17,6 +17,7 @@ from app.modules.dental_qa.schemas import (
 )
 from .stage1a_sop_auditor import audit_dental_sops
 from .stage1b_clinic_auditor import audit_clinic_protocols
+from .stage1c_voice_rating_auditor import audit_voice_rating_parameters
 from .stage2_behavioral_evaluator import evaluate_behavioral_dimensions
 from .stage3_scoring_engine import calculate_clamped_scores, DEFAULT_WEIGHTS
 
@@ -109,15 +110,24 @@ async def evaluate_dental_call(
 
     logger.info(f"Starting 2-Stage Multi-Call QA Evaluation for job: {call_meta.job_id}")
 
-    # STAGE 1: Parallel Execution of SOP and Clinic Audits
-    logger.info("Dispatching Stage 1A & 1B in parallel...")
+    # STAGE 1: Parallel Execution of SOP, Clinic, and Voice Rating Audits
+    logger.info("Dispatching Stage 1A, 1B & 1C in parallel...")
+    dead_air_flag = (extra_metadata or {}).get("dead_air_watchdog_triggered")
     sop_task = audit_dental_sops(transcript, model_name=model_name)
     clinic_task = audit_clinic_protocols(transcript, model_name=model_name)
+    voice_task = audit_voice_rating_parameters(
+        transcript,
+        dead_air_triggered=dead_air_flag,
+        model_name=model_name,
+    )
 
-    (sop_res, sop_usage), (clinic_res, clinic_usage) = await asyncio.gather(sop_task, clinic_task)
+    (sop_res, sop_usage), (clinic_res, clinic_usage), (voice_res, voice_usage) = await asyncio.gather(
+        sop_task, clinic_task, voice_task
+    )
     logger.info(
         f"Stage 1 Complete. SOP Triggers: {len(sop_res.sop_audit_table)}, "
-        f"Clinic Triggers: {len(clinic_res.clinic_audit_table)}"
+        f"Clinic Triggers: {len(clinic_res.clinic_audit_table)}, "
+        f"Voice Adherence: {voice_res.overall_voice_adherence_pct}%"
     )
 
     # STAGE 2: Behavioral & Qualitative Evaluation
@@ -236,18 +246,21 @@ async def evaluate_dental_call(
     p_tokens = (
         sop_usage.get("promptTokenCount", 0)
         + clinic_usage.get("promptTokenCount", 0)
+        + voice_usage.get("promptTokenCount", 0)
         + behavioral_usage.get("promptTokenCount", 0)
         + stage4_usage.get("promptTokenCount", 0)
     )
     c_tokens = (
         sop_usage.get("candidatesTokenCount", 0)
         + clinic_usage.get("candidatesTokenCount", 0)
+        + voice_usage.get("candidatesTokenCount", 0)
         + behavioral_usage.get("candidatesTokenCount", 0)
         + stage4_usage.get("candidatesTokenCount", 0)
     )
     t_tokens = (
         sop_usage.get("thoughtsTokenCount", 0)
         + clinic_usage.get("thoughtsTokenCount", 0)
+        + voice_usage.get("thoughtsTokenCount", 0)
         + behavioral_usage.get("thoughtsTokenCount", 0)
         + stage4_usage.get("thoughtsTokenCount", 0)
     )
@@ -269,5 +282,6 @@ async def evaluate_dental_call(
         detailed_analysis=qualitative_analysis,
         token_usage=token_usage_dict,
         action_verification=action_verdict,
+        voice_rating=voice_res,
     )
 
