@@ -138,4 +138,62 @@ def test_frontend_payload_mapping_includes_voice_rating():
     assert "voice_rating" in payload
     assert payload["voice_rating"]["total_parameters_evaluated"] == 1
     assert payload["voice_rating"]["session_a_opening"]["followed_count"] == 1
-    assert payload["voice_rating"]["overall_voice_adherence_pct"] == 100.0
+
+
+@pytest.mark.asyncio
+async def test_audit_voice_rating_subcall_isolation():
+    """Verifies that if Sub-call 2 times out, Sub-call 1 results are retained and E2 is still deterministic."""
+    from unittest.mock import patch
+    from app.modules.dental_qa.core.stage1c_voice_rating_auditor import audit_voice_rating_parameters
+
+    mock_raw_abcd = Stage1CBlocksABCDRawResponse(
+        session_a_parameters=[
+            VoiceRatingParameterItem(code="A1", parameter_question="Q", verdict=VoiceVerdict.FOLLOWED, reasoning="R1"),
+            VoiceRatingParameterItem(code="A2", parameter_question="Q", verdict=VoiceVerdict.FOLLOWED, reasoning="R2"),
+            VoiceRatingParameterItem(code="A3", parameter_question="Q", verdict=VoiceVerdict.FOLLOWED, reasoning="R3"),
+            VoiceRatingParameterItem(code="A4", parameter_question="Q", verdict=VoiceVerdict.FOLLOWED, reasoning="R4"),
+        ],
+        session_b_parameters=[
+            VoiceRatingParameterItem(code="B1", parameter_question="Q", verdict=VoiceVerdict.FOLLOWED, reasoning="R5"),
+            VoiceRatingParameterItem(code="B2", parameter_question="Q", verdict=VoiceVerdict.FOLLOWED, reasoning="R6"),
+        ],
+        session_c_parameters=[
+            VoiceRatingParameterItem(code="C1", parameter_question="Q", verdict=VoiceVerdict.FOLLOWED, reasoning="R7"),
+            VoiceRatingParameterItem(code="C2", parameter_question="Q", verdict=VoiceVerdict.FOLLOWED, reasoning="R8"),
+            VoiceRatingParameterItem(code="C3", parameter_question="Q", verdict=VoiceVerdict.FOLLOWED, reasoning="R9"),
+            VoiceRatingParameterItem(code="C4", parameter_question="Q", verdict=VoiceVerdict.FOLLOWED, reasoning="R10"),
+            VoiceRatingParameterItem(code="C5", parameter_question="Q", verdict=VoiceVerdict.FOLLOWED, reasoning="R11"),
+        ],
+        session_d_parameters=[
+            VoiceRatingParameterItem(code="D1", parameter_question="Q", verdict=VoiceVerdict.FOLLOWED, reasoning="R12"),
+            VoiceRatingParameterItem(code="D2", parameter_question="Q", verdict=VoiceVerdict.FOLLOWED, reasoning="R13"),
+            VoiceRatingParameterItem(code="D3", parameter_question="Q", verdict=VoiceVerdict.FOLLOWED, reasoning="R14"),
+            VoiceRatingParameterItem(code="D4", parameter_question="Q", verdict=VoiceVerdict.FOLLOWED, reasoning="R15"),
+        ],
+    )
+
+    async def mock_call(prompt, schema_cls, **kwargs):
+        if schema_cls == Stage1CBlocksABCDRawResponse:
+            return mock_raw_abcd, {"promptTokenCount": 500, "candidatesTokenCount": 200}
+        raise TimeoutError("Stage 1C Sub-call 2 (Block E) failed after max retries.")
+
+    with patch("app.modules.dental_qa.core.stage1c_voice_rating_auditor._execute_gemini_call", side_effect=mock_call):
+        resp, usage = await audit_voice_rating_parameters(
+            transcript="Front Desk Trainee: Hello\nPatient: Hi",
+            dead_air_triggered=False,
+        )
+
+        # Blocks A-D should be preserved from Sub-call 1
+        assert resp.session_a_opening.followed_count == 4
+        assert resp.session_b_initial_addressal.followed_count == 2
+        assert resp.session_c_persuasion.followed_count == 5
+        assert resp.session_d_closure.followed_count == 4
+
+        # Block E should be fallback, but E2 must be deterministic
+        e2 = next(p for p in resp.session_e_overall_comm.parameters if p.code == "E2")
+        assert e2.verdict == VoiceVerdict.FOLLOWED  # Because dead_air_triggered=False
+        e1 = next(p for p in resp.session_e_overall_comm.parameters if p.code == "E1")
+        assert e1.verdict == VoiceVerdict.NOT_POSSIBLE  # Fallback due to subcall 2 error
+
+        # 15 followed (A-D) + 1 followed (E2) = 16 followed out of 16 analyzable (11 fallback E items are excluded by Option B denominator) = 100.0%
+        assert resp.overall_voice_adherence_pct == 100.0

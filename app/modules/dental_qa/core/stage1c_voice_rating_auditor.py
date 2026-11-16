@@ -262,6 +262,7 @@ async def _execute_gemini_call(
     schema_cls: type,
     model_name: Optional[str] = None,
     http_timeout: Optional[float] = None,
+    thinking_level: Optional[str] = None,
     stage_name: str = "Stage 1C",
 ) -> Tuple[Any, dict]:
     """Helper to execute structured JSON generation call to Gemini with retry logic."""
@@ -270,7 +271,9 @@ async def _execute_gemini_call(
         raise ValueError("GEMINI_API_KEY is not configured.")
 
     model = model_name or settings.GEMINI_MODEL
-    timeout = http_timeout or settings.HTTP_TIMEOUT_SECONDS
+    # For Stage 1C parameter checklist evaluation, 'low' thinking level provides
+    # fast (<5s) turnaround without risking deep reasoning read timeouts.
+    effective_thinking = thinking_level or getattr(settings, "GEMINI_THINKING_LEVEL_STAGE1C", "low")
 
     url = f"{settings.GEMINI_API_BASE_URL}/{model}:generateContent?key={api_key}"
     headers = {"Content-Type": "application/json"}
@@ -280,17 +283,25 @@ async def _execute_gemini_call(
             "responseMimeType": "application/json",
             "responseSchema": to_gemini_schema(schema_cls),
             "thinkingConfig": {
-                "thinkingLevel": settings.GEMINI_THINKING_LEVEL
+                "thinkingLevel": effective_thinking
             }
         }
     }
 
     max_retries = settings.MAX_RETRIES
     backoff = settings.BACKOFF_FACTOR
+    read_timeout = http_timeout or settings.HTTP_TIMEOUT_SECONDS
+    timeout_config = httpx.Timeout(
+        timeout=read_timeout,
+        connect=20.0,
+        read=read_timeout,
+        write=30.0,
+        pool=30.0,
+    )
 
     for attempt in range(max_retries):
         try:
-            async with httpx.AsyncClient(timeout=timeout) as client:
+            async with httpx.AsyncClient(timeout=timeout_config) as client:
                 res = await client.post(url, headers=headers, json=payload)
                 if res.status_code == 200:
                     data = res.json()
@@ -354,51 +365,57 @@ FALLBACK_QUESTIONS: Dict[str, str] = {
 }
 
 
+def _make_fallback_item(
+    code: str,
+    dead_air_triggered: Optional[bool] = None,
+    error_msg: str = "Evaluation unavailable",
+) -> VoiceRatingParameterItem:
+    """Creates an individual parameter fallback item."""
+    if code == "E2":
+        if dead_air_triggered is True:
+            return VoiceRatingParameterItem(
+                code="E2",
+                parameter_question=FALLBACK_QUESTIONS[code],
+                verdict=VoiceVerdict.NOT_FOLLOWED,
+                evidence_quote="Dead air episode >= 45.0s detected.",
+                reasoning="Telemetry watchdog recorded prolonged silence exceeding 45 seconds.",
+            )
+        elif dead_air_triggered is False:
+            return VoiceRatingParameterItem(
+                code="E2",
+                parameter_question=FALLBACK_QUESTIONS[code],
+                verdict=VoiceVerdict.FOLLOWED,
+                evidence_quote="No dead air >= 45.0s detected.",
+                reasoning="Continuous conversational flow maintained without prolonged dead air exceeding 45 seconds.",
+            )
+        else:
+            return VoiceRatingParameterItem(
+                code="E2",
+                parameter_question=FALLBACK_QUESTIONS[code],
+                verdict=VoiceVerdict.NOT_POSSIBLE,
+                evidence_quote="",
+                reasoning="Audio timing telemetry unavailable.",
+            )
+
+    return VoiceRatingParameterItem(
+        code=code,
+        parameter_question=FALLBACK_QUESTIONS.get(code, ""),
+        verdict=VoiceVerdict.NOT_POSSIBLE,
+        evidence_quote="",
+        reasoning=f"Automated evaluation unavailable: {error_msg}",
+    )
+
+
 def _create_fallback_response(
     dead_air_triggered: Optional[bool],
     error_msg: str,
 ) -> Tuple[VoiceRatingAuditResponse, dict]:
     """Generates a safe diagnostic fallback response when upstream LLM calls fail."""
-    def _make_item(code: str) -> VoiceRatingParameterItem:
-        if code == "E2":
-            if dead_air_triggered is True:
-                return VoiceRatingParameterItem(
-                    code="E2",
-                    parameter_question=FALLBACK_QUESTIONS[code],
-                    verdict=VoiceVerdict.NOT_FOLLOWED,
-                    evidence_quote="Dead air episode >= 45.0s detected.",
-                    reasoning="Telemetry watchdog recorded prolonged silence exceeding 45 seconds.",
-                )
-            elif dead_air_triggered is False:
-                return VoiceRatingParameterItem(
-                    code="E2",
-                    parameter_question=FALLBACK_QUESTIONS[code],
-                    verdict=VoiceVerdict.FOLLOWED,
-                    evidence_quote="No dead air >= 45.0s detected.",
-                    reasoning="Continuous conversational flow maintained without prolonged dead air exceeding 45 seconds.",
-                )
-            else:
-                return VoiceRatingParameterItem(
-                    code="E2",
-                    parameter_question=FALLBACK_QUESTIONS[code],
-                    verdict=VoiceVerdict.NOT_POSSIBLE,
-                    evidence_quote="",
-                    reasoning="Audio timing telemetry unavailable.",
-                )
-
-        return VoiceRatingParameterItem(
-            code=code,
-            parameter_question=FALLBACK_QUESTIONS.get(code, ""),
-            verdict=VoiceVerdict.NOT_POSSIBLE,
-            evidence_quote="",
-            reasoning=f"Automated evaluation unavailable: {error_msg}",
-        )
-
-    block_a = VoiceRatingSessionBlock.from_parameters("A", "Opening", [_make_item(c) for c in ("A1", "A2", "A3", "A4")])
-    block_b = VoiceRatingSessionBlock.from_parameters("B", "Initial Addressal", [_make_item(c) for c in ("B1", "B2")])
-    block_c = VoiceRatingSessionBlock.from_parameters("C", "Persuasion", [_make_item(c) for c in ("C1", "C2", "C3", "C4", "C5")])
-    block_d = VoiceRatingSessionBlock.from_parameters("D", "Closure", [_make_item(c) for c in ("D1", "D2", "D3", "D4")])
-    block_e = VoiceRatingSessionBlock.from_parameters("E", "Overall Communication", [_make_item(c) for c in ("E1", "E2", "E3", "E4", "E5", "E6", "E7", "E8", "E9", "E10", "E11", "E12")])
+    block_a = VoiceRatingSessionBlock.from_parameters("A", "Opening", [_make_fallback_item(c, error_msg=error_msg) for c in ("A1", "A2", "A3", "A4")])
+    block_b = VoiceRatingSessionBlock.from_parameters("B", "Initial Addressal", [_make_fallback_item(c, error_msg=error_msg) for c in ("B1", "B2")])
+    block_c = VoiceRatingSessionBlock.from_parameters("C", "Persuasion", [_make_fallback_item(c, error_msg=error_msg) for c in ("C1", "C2", "C3", "C4", "C5")])
+    block_d = VoiceRatingSessionBlock.from_parameters("D", "Closure", [_make_fallback_item(c, error_msg=error_msg) for c in ("D1", "D2", "D3", "D4")])
+    block_e = VoiceRatingSessionBlock.from_parameters("E", "Overall Communication", [_make_fallback_item(c, dead_air_triggered=dead_air_triggered, error_msg=error_msg) for c in ("E1", "E2", "E3", "E4", "E5", "E6", "E7", "E8", "E9", "E10", "E11", "E12")])
 
     resp = VoiceRatingAuditResponse.from_blocks(block_a, block_b, block_c, block_d, block_e)
     zero_usage = {
@@ -418,8 +435,8 @@ async def audit_voice_rating_parameters(
 ) -> Tuple[VoiceRatingAuditResponse, dict]:
     """
     Executes Stage 1C Voice Rating Parameters evaluation.
-    Dispatches 2 parallel sub-calls (Blocks A-D, and Block E) and deterministically injects E2.
-    Isolates upstream API errors to ensure call evaluation never aborts.
+    Dispatches 2 parallel sub-calls (Blocks A-D, and Block E) with sub-call isolation.
+    Deterministically injects E2 from watchdog telemetry.
     """
     try:
         prompt_abcd = f"{SYSTEM_PROMPT_BLOCKS_ABCD}\n\n[CONVERSATION TRANSCRIPT TO AUDIT]:\n{transcript}"
@@ -440,69 +457,58 @@ async def audit_voice_rating_parameters(
             stage_name="Stage 1C Sub-call 2 (Block E)",
         )
 
-        (raw_abcd, usage_abcd), (raw_e, usage_e) = await asyncio.gather(task_abcd, task_e)
+        results = await asyncio.gather(task_abcd, task_e, return_exceptions=True)
+        res_abcd, res_e = results[0], results[1]
 
-        # Deterministic Evaluation of Parameter E2 (Dead Air > 45s)
-        if dead_air_triggered is True:
-            e2_verdict = VoiceVerdict.NOT_FOLLOWED
-            e2_reasoning = "Telemetry watchdog recorded prolonged silence exceeding the 45-second dead air threshold during the call."
-            e2_quote = "Dead air episode >= 45.0s detected."
-        elif dead_air_triggered is False:
-            e2_verdict = VoiceVerdict.FOLLOWED
-            e2_reasoning = "Continuous conversational flow maintained without prolonged dead air exceeding 45 seconds."
-            e2_quote = "No dead air >= 45.0s detected by watchdog."
+        # Process Sub-call 1 (Blocks A-D) with isolation
+        usage_abcd = {}
+        if isinstance(res_abcd, Exception):
+            logger.warning(f"Stage 1C Sub-call 1 (Blocks A-D) failed: {res_abcd}. Generating fallback for A-D.")
+            err_abcd = str(res_abcd)
+            params_a = [_make_fallback_item(c, error_msg=err_abcd) for c in ("A1", "A2", "A3", "A4")]
+            params_b = [_make_fallback_item(c, error_msg=err_abcd) for c in ("B1", "B2")]
+            params_c = [_make_fallback_item(c, error_msg=err_abcd) for c in ("C1", "C2", "C3", "C4", "C5")]
+            params_d = [_make_fallback_item(c, error_msg=err_abcd) for c in ("D1", "D2", "D3", "D4")]
         else:
-            e2_verdict = VoiceVerdict.NOT_POSSIBLE
-            e2_reasoning = "Audio timing telemetry unavailable to evaluate dead air duration."
-            e2_quote = ""
+            raw_abcd, usage_abcd = res_abcd
+            params_a = raw_abcd.session_a_parameters
+            params_b = raw_abcd.session_b_parameters
+            params_c = raw_abcd.session_c_parameters
+            params_d = raw_abcd.session_d_parameters
 
-        e2_item = VoiceRatingParameterItem(
-            code="E2",
-            parameter_question="Was there Dead Air of more than 45s during the conversation ?",
-            verdict=e2_verdict,
-            evidence_quote=e2_quote,
-            reasoning=e2_reasoning,
-        )
+        block_a = VoiceRatingSessionBlock.from_parameters("A", "Opening", params_a)
+        block_b = VoiceRatingSessionBlock.from_parameters("B", "Initial Addressal", params_b)
+        block_c = VoiceRatingSessionBlock.from_parameters("C", "Persuasion", params_c)
+        block_d = VoiceRatingSessionBlock.from_parameters("D", "Closure", params_d)
 
-        # Reconstruct Block E parameters with E2 inserted in proper numerical position
-        e_params: List[VoiceRatingParameterItem] = []
-        e2_inserted = False
-        for p in raw_e.session_e_parameters:
-            code_upper = (p.code or "").upper().strip()
-            if not e2_inserted and code_upper in ("E3", "E4", "E5", "E6", "E7", "E8", "E9", "E10", "E11", "E12"):
+        # Process Sub-call 2 (Block E) with deterministic E2 injection and isolation
+        usage_e = {}
+        e2_item = _make_fallback_item("E2", dead_air_triggered=dead_air_triggered)
+
+        if isinstance(res_e, Exception):
+            logger.warning(f"Stage 1C Sub-call 2 (Block E) failed: {res_e}. Generating fallback for E.")
+            err_e = str(res_e)
+            e_params = []
+            for c in ("E1", "E2", "E3", "E4", "E5", "E6", "E7", "E8", "E9", "E10", "E11", "E12"):
+                if c == "E2":
+                    e_params.append(e2_item)
+                else:
+                    e_params.append(_make_fallback_item(c, error_msg=err_e))
+        else:
+            raw_e, usage_e = res_e
+            e_params = []
+            e2_inserted = False
+            for p in raw_e.session_e_parameters:
+                code_upper = (p.code or "").upper().strip()
+                if not e2_inserted and code_upper in ("E3", "E4", "E5", "E6", "E7", "E8", "E9", "E10", "E11", "E12"):
+                    e_params.append(e2_item)
+                    e2_inserted = True
+                if code_upper != "E2":
+                    e_params.append(p)
+            if not e2_inserted:
                 e_params.append(e2_item)
-                e2_inserted = True
-            if code_upper != "E2":
-                e_params.append(p)
-        if not e2_inserted:
-            e_params.append(e2_item)
 
-        # Assemble session blocks with computed metrics
-        block_a = VoiceRatingSessionBlock.from_parameters(
-            session_id="A",
-            session_title="Opening",
-            parameters=raw_abcd.session_a_parameters,
-        )
-        block_b = VoiceRatingSessionBlock.from_parameters(
-            session_id="B",
-            session_title="Initial Addressal",
-            parameters=raw_abcd.session_b_parameters,
-        )
-        block_c = VoiceRatingSessionBlock.from_parameters(
-            session_id="C",
-            session_title="Persuasion",
-            parameters=raw_abcd.session_c_parameters,
-        )
-        block_d = VoiceRatingSessionBlock.from_parameters(
-            session_id="D",
-            session_title="Closure",
-            parameters=raw_abcd.session_d_parameters,
-        )
-        block_e = VoiceRatingSessionBlock.from_parameters(
-            session_id="E",
-            session_title="Overall Communication",
-            parameters=e_params,
-        )
+        block_e = VoiceRatingSessionBlock.from_parameters("E", "Overall Communication", e_params)
 
         # Assemble consolidated response
         consolidated_response = VoiceRatingAuditResponse.from_blocks(
@@ -513,7 +519,6 @@ async def audit_voice_rating_parameters(
             block_e=block_e,
         )
 
-        # Aggregate token usage across both sub-calls
         combined_usage = {
             "promptTokenCount": usage_abcd.get("promptTokenCount", 0) + usage_e.get("promptTokenCount", 0),
             "candidatesTokenCount": usage_abcd.get("candidatesTokenCount", 0) + usage_e.get("candidatesTokenCount", 0),
