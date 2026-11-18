@@ -44,8 +44,9 @@ class DentalQAConfig:
 
     GEMINI_THINKING_LEVEL: str = "high"
     HTTP_TIMEOUT_SECONDS: float = 120.0
-    MAX_RETRIES: int = 3
+    MAX_RETRIES: int = 5
     BACKOFF_FACTOR: float = 2.0
+    MAX_CONCURRENT_GEMINI_CALLS: int = 2
     GEMINI_API_BASE_URL: str = "https://generativelanguage.googleapis.com/v1beta/models"
 
 

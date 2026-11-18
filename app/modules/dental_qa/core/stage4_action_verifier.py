@@ -27,6 +27,7 @@ from app.modules.dental_qa.schemas.action_verification import (
     SuggestedSlot,
     TranscriptOutcome,
 )
+from app.modules.dental_qa.core.gemini_caller import execute_gemini_structured_call
 
 logger = logging.getLogger("dental_qa_engine.stage4_action_verifier")
 
@@ -310,66 +311,15 @@ EXTRACTION RULES:
 [END CONVERSATION TRANSCRIPT]
 """
 
-    url = f"{qa_settings.GEMINI_API_BASE_URL}/{model}:generateContent?key={api_key}"
-    headers = {"Content-Type": "application/json"}
-    payload = {
-        "contents": [{"parts": [{"text": prompt}]}],
-        "generationConfig": {
-            "responseMimeType": "application/json",
-            "responseSchema": TRANSCRIPT_OUTCOME_SCHEMA,
-            "thinkingConfig": {
-                "thinkingLevel": "low",
-            },
-        },
-    }
-
-    max_retries = qa_settings.MAX_RETRIES
-    backoff = qa_settings.BACKOFF_FACTOR
-
-    for attempt in range(max_retries):
-        try:
-            async with httpx.AsyncClient(timeout=http_timeout) as client:
-                res = await client.post(url, headers=headers, json=payload)
-                if res.status_code == 200:
-                    data = res.json()
-                    candidates = data.get("candidates", [])
-                    if not candidates:
-                        raise ValueError(f"No candidates returned in Gemini response: {data}")
-
-                    parts = candidates[0].get("content", {}).get("parts", [])
-                    raw_text = "".join(
-                        p.get("text", "") for p in parts if not p.get("thought", False)
-                    )
-                    if not raw_text.strip():
-                        finish_reason = candidates[0].get("finishReason", "UNKNOWN")
-                        raise ValueError(
-                            f"Empty text in Gemini Stage 4 response candidate (finishReason: {finish_reason})"
-                        )
-
-                    parsed_dict = json.loads(_strip_json_fences(raw_text))
-                    usage = data.get("usageMetadata", {})
-                    if not isinstance(usage, dict):
-                        usage = {}
-                    return TranscriptOutcome.model_validate(parsed_dict), usage
-
-                if res.status_code in [429, 500, 502, 503, 504]:
-                    logger.warning(
-                        f"Gemini Stage 4 returned status {res.status_code}. "
-                        f"Retrying attempt {attempt + 1}/{max_retries}..."
-                    )
-                else:
-                    raise RuntimeError(
-                        f"Unrecoverable error in Stage 4 extraction (status {res.status_code}): {res.text}"
-                    )
-
-        except (httpx.RequestError, json.JSONDecodeError, ValueError, ValidationError) as e:
-            err_msg = str(e) or "Socket/Read Timeout"
-            logger.warning(f"Stage 4 extraction attempt {attempt + 1} failed: {type(e).__name__}: {err_msg}")
-
-        if attempt < max_retries - 1:
-            await asyncio.sleep(backoff ** attempt)
-
-    raise TimeoutError("Stage 4 Transcript Outcome extraction failed after max retries.")
+    raw_dict, usage = await execute_gemini_structured_call(
+        prompt=prompt,
+        schema=TRANSCRIPT_OUTCOME_SCHEMA,
+        stage_name="Stage 4 Action Verification",
+        thinking_level="low",
+        model_name=model_name,
+        timeout=timeout,
+    )
+    return TranscriptOutcome.model_validate(raw_dict), usage
 
 
 async def extract_transcript_outcome(

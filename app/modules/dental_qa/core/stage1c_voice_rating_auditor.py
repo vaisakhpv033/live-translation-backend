@@ -22,6 +22,7 @@ from pydantic import ValidationError
 
 from app.modules.dental_qa.config import settings
 from app.modules.dental_qa.schemas.gemini_schema import to_gemini_schema
+from app.modules.dental_qa.core.gemini_caller import execute_gemini_structured_call
 from app.modules.dental_qa.schemas.voice_rating import (
     VoiceVerdict,
     VoiceRatingParameterItem,
@@ -265,73 +266,16 @@ async def _execute_gemini_call(
     thinking_level: Optional[str] = None,
     stage_name: str = "Stage 1C",
 ) -> Tuple[Any, dict]:
-    """Helper to execute structured JSON generation call to Gemini with retry logic."""
-    api_key = settings.GEMINI_API_KEY
-    if not api_key:
-        raise ValueError("GEMINI_API_KEY is not configured.")
-
-    model = model_name or settings.GEMINI_MODEL
-    # For Stage 1C parameter checklist evaluation, 'low' thinking level provides
-    # fast (<5s) turnaround without risking deep reasoning read timeouts.
+    """Helper to execute structured JSON generation call to Gemini with rate-limit resiliency."""
     effective_thinking = thinking_level or getattr(settings, "GEMINI_THINKING_LEVEL_STAGE1C", "low")
-
-    url = f"{settings.GEMINI_API_BASE_URL}/{model}:generateContent?key={api_key}"
-    headers = {"Content-Type": "application/json"}
-    payload = {
-        "contents": [{"parts": [{"text": prompt}]}],
-        "generationConfig": {
-            "responseMimeType": "application/json",
-            "responseSchema": to_gemini_schema(schema_cls),
-            "thinkingConfig": {
-                "thinkingLevel": effective_thinking
-            }
-        }
-    }
-
-    max_retries = settings.MAX_RETRIES
-    backoff = settings.BACKOFF_FACTOR
-    read_timeout = http_timeout or settings.HTTP_TIMEOUT_SECONDS
-    timeout_config = httpx.Timeout(
-        timeout=read_timeout,
-        connect=20.0,
-        read=read_timeout,
-        write=30.0,
-        pool=30.0,
+    return await execute_gemini_structured_call(
+        prompt=prompt,
+        schema=schema_cls,
+        stage_name=stage_name,
+        thinking_level=effective_thinking,
+        model_name=model_name,
+        timeout=http_timeout,
     )
-
-    for attempt in range(max_retries):
-        try:
-            async with httpx.AsyncClient(timeout=timeout_config) as client:
-                res = await client.post(url, headers=headers, json=payload)
-                if res.status_code == 200:
-                    data = res.json()
-                    candidates = data.get("candidates", [])
-                    if not candidates:
-                        raise ValueError(f"No candidates returned in Gemini response: {data}")
-
-                    parts = candidates[0].get("content", {}).get("parts", [])
-                    raw_text = "".join(p.get("text", "") for p in parts if not p.get("thought", False))
-                    if not raw_text.strip():
-                        finish_reason = candidates[0].get("finishReason", "UNKNOWN")
-                        raise ValueError(f"Empty text in Gemini response candidate (finishReason: {finish_reason})")
-
-                    parsed_dict = json.loads(raw_text.strip())
-                    usage = data.get("usageMetadata", {})
-                    return schema_cls.model_validate(parsed_dict), usage
-
-                if res.status_code in [429, 500, 502, 503, 504]:
-                    logger.warning(f"Gemini {stage_name} returned status {res.status_code}. Retrying attempt {attempt + 1}/{max_retries}...")
-                else:
-                    raise RuntimeError(f"Unrecoverable error in {stage_name} (status {res.status_code}): {res.text}")
-
-        except (httpx.RequestError, json.JSONDecodeError, ValueError, ValidationError) as e:
-            err_msg = str(e) or "Socket/Read Timeout"
-            logger.warning(f"{stage_name} attempt {attempt + 1} failed: {type(e).__name__}: {err_msg}")
-
-        if attempt < max_retries - 1:
-            await asyncio.sleep(backoff ** attempt)
-
-    raise TimeoutError(f"{stage_name} failed after max retries.")
 
 
 FALLBACK_QUESTIONS: Dict[str, str] = {

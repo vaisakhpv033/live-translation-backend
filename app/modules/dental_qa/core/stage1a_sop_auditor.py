@@ -13,7 +13,7 @@ from pydantic import ValidationError
 from app.modules.dental_qa.config import settings
 from app.modules.dental_qa.protocols import format_sop_rules_for_prompt
 from app.modules.dental_qa.schemas import DentalSOPAuditResponse
-from app.modules.dental_qa.schemas.gemini_schema import to_gemini_schema
+from app.modules.dental_qa.core.gemini_caller import execute_gemini_structured_call
 
 logger = logging.getLogger("dental_qa_engine.stage1a")
 
@@ -44,64 +44,13 @@ async def audit_dental_sops(
     model_name: Optional[str] = None,
     timeout: Optional[float] = None,
 ) -> tuple[DentalSOPAuditResponse, dict]:
-    """Executes Stage 1A: Dental SOP audit with Gemini thinking mode."""
-    api_key = settings.GEMINI_API_KEY
-    if not api_key:
-        raise ValueError("GEMINI_API_KEY is not configured.")
-
-    model = model_name or settings.GEMINI_MODEL
-    http_timeout = timeout or settings.HTTP_TIMEOUT_SECONDS
-
+    """Executes Stage 1A: Dental SOP audit with rate-limit resilient Gemini caller."""
     prompt = f"{SYSTEM_PROMPT_SOP_AUDITOR}\n\n[CONVERSATION TRANSCRIPT TO AUDIT]:\n{transcript}"
-    url = f"https://generativelanguage.googleapis.com/v1beta/models/{model}:generateContent?key={api_key}"
-    headers = {"Content-Type": "application/json"}
-
-    payload = {
-        "contents": [{"parts": [{"text": prompt}]}],
-        "generationConfig": {
-            "responseMimeType": "application/json",
-            "responseSchema": to_gemini_schema(DentalSOPAuditResponse),
-            "thinkingConfig": {
-                "thinkingLevel": settings.GEMINI_THINKING_LEVEL
-            }
-        }
-    }
-
-    max_retries = settings.MAX_RETRIES
-    backoff = settings.BACKOFF_FACTOR
-
-    for attempt in range(max_retries):
-        try:
-            async with httpx.AsyncClient(timeout=http_timeout) as client:
-                res = await client.post(url, headers=headers, json=payload)
-                if res.status_code == 200:
-                    data = res.json()
-                    candidates = data.get("candidates", [])
-                    if not candidates:
-                        raise ValueError(f"No candidates returned in Gemini response: {data}")
-                    
-                    # Safe extraction: concatenate non-thought parts
-                    parts = candidates[0].get("content", {}).get("parts", [])
-                    raw_text = "".join(p.get("text", "") for p in parts if not p.get("thought", False))
-                    if not raw_text.strip():
-                        finish_reason = candidates[0].get("finishReason", "UNKNOWN")
-                        raise ValueError(f"Empty text in Gemini response candidate (finishReason: {finish_reason})")
-
-                    parsed_dict = json.loads(raw_text.strip())
-                    usage = data.get("usageMetadata", {})
-                    return DentalSOPAuditResponse.model_validate(parsed_dict), usage
-
-                if res.status_code in [429, 500, 502, 503, 504]:
-                    logger.warning(f"Gemini Stage 1A returned status {res.status_code}. Retrying attempt {attempt + 1}/{max_retries}...")
-                else:
-                    raise RuntimeError(f"Unrecoverable error in Stage 1A (status {res.status_code}): {res.text}")
-
-        except (httpx.RequestError, json.JSONDecodeError, ValueError, ValidationError) as e:
-            err_msg = str(e) or "Socket/Read Timeout"
-            logger.warning(f"Stage 1A attempt {attempt + 1} failed: {type(e).__name__}: {err_msg}")
-
-        if attempt < max_retries - 1:
-            await asyncio.sleep(backoff ** attempt)
-
-    raise TimeoutError("Stage 1A Dental SOP Audit failed after max retries.")
+    return await execute_gemini_structured_call(
+        prompt=prompt,
+        schema=DentalSOPAuditResponse,
+        stage_name="Stage 1A Dental SOP Audit",
+        model_name=model_name,
+        timeout=timeout,
+    )
 

@@ -14,10 +14,14 @@ from app.modules.dental_qa.schemas import (
     QualitativeAnalysis,
     DentalQAReportCard,
     ComplianceSecurityReview,
+    DentalSOPAuditResponse,
+    ClinicProtocolAuditResponse,
+    BehavioralEvaluationResponse,
+    DimensionScore,
 )
 from .stage1a_sop_auditor import audit_dental_sops
 from .stage1b_clinic_auditor import audit_clinic_protocols
-from .stage1c_voice_rating_auditor import audit_voice_rating_parameters
+from .stage1c_voice_rating_auditor import audit_voice_rating_parameters, _create_fallback_response
 from .stage2_behavioral_evaluator import evaluate_behavioral_dimensions
 from .stage3_scoring_engine import calculate_clamped_scores, DEFAULT_WEIGHTS
 
@@ -110,8 +114,8 @@ async def evaluate_dental_call(
 
     logger.info(f"Starting 2-Stage Multi-Call QA Evaluation for job: {call_meta.job_id}")
 
-    # STAGE 1: Parallel Execution of SOP, Clinic, and Voice Rating Audits
-    logger.info("Dispatching Stage 1A, 1B & 1C in parallel...")
+    # STAGE 1: Parallel Execution of SOP, Clinic, and Voice Rating Audits with Concurrency Control
+    logger.info("Dispatching Stage 1A, 1B & 1C with rate-limit resiliency...")
     dead_air_flag = (extra_metadata or {}).get("dead_air_watchdog_triggered")
     sop_task = audit_dental_sops(transcript, model_name=model_name)
     clinic_task = audit_clinic_protocols(transcript, model_name=model_name)
@@ -121,9 +125,40 @@ async def evaluate_dental_call(
         model_name=model_name,
     )
 
-    (sop_res, sop_usage), (clinic_res, clinic_usage), (voice_res, voice_usage) = await asyncio.gather(
-        sop_task, clinic_task, voice_task
-    )
+    stage1_results = await asyncio.gather(sop_task, clinic_task, voice_task, return_exceptions=True)
+    res_sop, res_clinic, res_voice = stage1_results[0], stage1_results[1], stage1_results[2]
+
+    # Fault isolation for Stage 1A (SOP)
+    if isinstance(res_sop, Exception):
+        logger.error(f"Stage 1A SOP Audit failed: {res_sop}. Using resilient fallback.", exc_info=True)
+        sop_res = DentalSOPAuditResponse(
+            dental_sop_adherence_score=5,
+            dental_sop_adherence_reason=f"SOP audit temporarily unavailable due to upstream error: {str(res_sop)}",
+            sop_audit_table=[],
+        )
+        sop_usage = {}
+    else:
+        sop_res, sop_usage = res_sop
+
+    # Fault isolation for Stage 1B (Clinic)
+    if isinstance(res_clinic, Exception):
+        logger.error(f"Stage 1B Clinic Protocol Audit failed: {res_clinic}. Using resilient fallback.", exc_info=True)
+        clinic_res = ClinicProtocolAuditResponse(
+            clinic_protocol_adherence_score=5,
+            clinic_protocol_adherence_reason=f"Clinic protocol audit temporarily unavailable due to upstream error: {str(res_clinic)}",
+            clinic_audit_table=[],
+        )
+        clinic_usage = {}
+    else:
+        clinic_res, clinic_usage = res_clinic
+
+    # Fault isolation for Stage 1C (Voice)
+    if isinstance(res_voice, Exception):
+        logger.error(f"Stage 1C Voice Rating Audit failed: {res_voice}. Using resilient fallback.", exc_info=True)
+        voice_res, voice_usage = _create_fallback_response(dead_air_flag, error_msg=str(res_voice))
+    else:
+        voice_res, voice_usage = res_voice
+
     logger.info(
         f"Stage 1 Complete. SOP Triggers: {len(sop_res.sop_audit_table)}, "
         f"Clinic Triggers: {len(clinic_res.clinic_audit_table)}, "
@@ -132,13 +167,39 @@ async def evaluate_dental_call(
 
     # STAGE 2: Behavioral & Qualitative Evaluation
     logger.info("Dispatching Stage 2 Behavioral Evaluator...")
-    behavioral_res, behavioral_usage = await evaluate_behavioral_dimensions(
-        transcript=transcript,
-        sop_audits=sop_res.sop_audit_table,
-        clinic_audits=clinic_res.clinic_audit_table,
-        model_name=model_name,
-    )
-    logger.info("Stage 2 Behavioral Evaluation Complete.")
+    try:
+        behavioral_res, behavioral_usage = await evaluate_behavioral_dimensions(
+            transcript=transcript,
+            sop_audits=sop_res.sop_audit_table,
+            clinic_audits=clinic_res.clinic_audit_table,
+            model_name=model_name,
+        )
+        logger.info("Stage 2 Behavioral Evaluation Complete.")
+    except Exception as e:
+        logger.error(f"Stage 2 Behavioral Evaluation failed: {e}. Using resilient fallback.", exc_info=True)
+        err_reason = f"Automated behavioral evaluation temporarily unavailable: {str(e)}"
+        fallback_dim = DimensionScore(score=5, reason=err_reason)
+        behavioral_res = BehavioralEvaluationResponse(
+            rapport_professionalism=fallback_dim,
+            discovery_needs_analysis=fallback_dim,
+            communication_skills=fallback_dim,
+            objection_handling=fallback_dim,
+            recommendation_quality=fallback_dim,
+            compliance_ethical_conduct=fallback_dim,
+            closing_effectiveness=fallback_dim,
+            call_summary="Call completed. Detailed qualitative assessment temporarily unavailable.",
+            strengths=[],
+            improvement_opportunities=["Please review the audio recording and repeat evaluation if needed."],
+            missed_opportunities=[],
+            compliance_review_security=ComplianceSecurityReview(
+                pci_dss_prepayment="Not evaluated: Upstream evaluation unavailable.",
+                hipaa_privacy="Not evaluated: Upstream evaluation unavailable.",
+                security_credentials="Not evaluated: Upstream evaluation unavailable.",
+            ),
+            coaching_recommendations=["Review transcript manually or re-trigger automated QA evaluation."],
+            assessment_reasoning_justification="Automated behavioral evaluation could not complete due to upstream API limits.",
+        )
+        behavioral_usage = {}
 
     # Collect raw scores from Stage 1 & Stage 2
     raw_scores = {
