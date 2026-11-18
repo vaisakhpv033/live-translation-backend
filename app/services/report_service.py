@@ -1,7 +1,7 @@
 import json
 import logging
 from abc import ABC, abstractmethod
-from typing import List, Optional
+from typing import List, Optional, Any, Dict
 from app.schemas.report import ReportCreate, ReportSummary, ReportDetail, ReportListResponse
 from app.repositories.report_repository import IReportRepository
 from app.services.evaluation_service import IEvaluationService
@@ -209,6 +209,96 @@ class ReportService(IReportService):
             },
         )
 
+    @staticmethod
+    def _parse_chat_history(chat_history_raw: Any) -> list[dict]:
+        """
+        Parses raw chat history (JSON string, dict, or list) into a standardized list of
+        chat messages for frontend display: [{"role": "user"|"assistant", "text": str, "interrupted": bool}].
+        Supports:
+        1. LiveKit ChatContext schema (type="message", role="user"|"assistant", content=[...])
+        2. Live Call STT / Copilot schema (role="user"|"assistant" or speaker="...", text="...")
+        3. Plain list of pre-formatted message dicts
+        """
+        if not chat_history_raw:
+            return []
+
+        data = chat_history_raw
+        if isinstance(data, str):
+            try:
+                data = json.loads(data)
+            except Exception:
+                return []
+
+        items = []
+        if isinstance(data, dict):
+            items = data.get("items", [])
+        elif isinstance(data, list):
+            items = data
+        else:
+            return []
+
+        chat_history = []
+        for item in items:
+            if not isinstance(item, dict):
+                continue
+
+            # Skip non-message items only if 'type' is explicitly provided and not a message
+            if "type" in item and item.get("type") not in ("message", "text", "transcript"):
+                continue
+
+            role = (item.get("role") or "").lower()
+            if role == "system":
+                continue
+
+            # Extract text from content (list or str), or fallback to text/message/transcript
+            content_val = item.get("content")
+            text = ""
+            if isinstance(content_val, list) and content_val:
+                text = " ".join([str(c) for c in content_val if isinstance(c, str)])
+            elif isinstance(content_val, str) and content_val.strip():
+                text = content_val.strip()
+
+            if not text:
+                for fallback_key in ["text", "message", "transcript"]:
+                    val = item.get(fallback_key)
+                    if isinstance(val, str) and val.strip():
+                        text = val.strip()
+                        break
+
+            text = text.strip()
+            if not text:
+                continue
+
+            # Role / Speaker normalization:
+            # Frontend aligns:
+            # - 'user': representative / front desk trainee (right side)
+            # - 'assistant': patient / customer (left side)
+            speaker_val = (item.get("speaker") or "").strip().lower()
+            if speaker_val:
+                if any(k in speaker_val for k in ["trainee", "front desk", "rep", "agent", "user"]):
+                    normalized_role = "user"
+                elif any(k in speaker_val for k in ["customer", "patient", "caller", "simulator"]):
+                    normalized_role = "assistant"
+                else:
+                    normalized_role = "user" if role in ["user", "trainee", "human", "agent"] else "assistant"
+            elif role:
+                if role in ["user", "trainee", "human", "agent"]:
+                    normalized_role = "user"
+                elif role in ["assistant", "model", "bot", "customer", "patient"]:
+                    normalized_role = "assistant"
+                else:
+                    normalized_role = role
+            else:
+                normalized_role = "user"
+
+            chat_history.append({
+                "role": normalized_role,
+                "text": text,
+                "interrupted": item.get("interrupted", False),
+            })
+
+        return chat_history
+
     def _row_to_report_detail(self, row: dict) -> ReportDetail:
         # Parse summary and chat_history from stored JSON strings
         summary = row.get("summary")
@@ -218,36 +308,7 @@ class ReportService(IReportService):
             except Exception:
                 pass
 
-        chat_history_raw = row.get("chat_history")
-        chat_history = []
-        if chat_history_raw and isinstance(chat_history_raw, str):
-            try:
-                data = json.loads(chat_history_raw)
-                if isinstance(data, dict) and "items" in data:
-                    items = data.get("items", [])
-                    for item in items:
-                        if item.get("type") != "message":
-                            continue
-                        role = item.get("role")
-                        if role == "system":
-                            continue
-
-                        content_list = item.get("content", [])
-                        text = ""
-                        if isinstance(content_list, list):
-                            text = " ".join([str(c) for c in content_list if isinstance(c, str)])
-                        elif isinstance(content_list, str):
-                            text = content_list
-
-                        chat_history.append({
-                            "role": role,
-                            "text": text,
-                            "interrupted": item.get("interrupted", False)
-                        })
-                elif isinstance(data, list):
-                    chat_history = data
-            except Exception:
-                pass
+        chat_history = self._parse_chat_history(row.get("chat_history"))
 
         return ReportDetail(
             job_id=row["job_id"],

@@ -411,3 +411,126 @@ async def test_legacy_empty_transcript_protection():
     assert payload["product_knowledge"]["score"] == 0
 
 
+# ──────────────────────────────────────────────────────────────
+#  7. Live Call & Mock Call Chat History Normalization Tests
+# ──────────────────────────────────────────────────────────────
+
+def test_live_call_chat_history_parsing():
+    """
+    Verifies that live call transcripts (SOS Live Copilot) without 'type: message'
+    and using 'text' instead of 'content' are properly parsed and not skipped.
+    """
+    live_raw = json.dumps({
+        "items": [
+            {"role": "user", "text": "Yes, thank you for calling Citrus Smiles Dental. My name is Vaishak."},
+            {"role": "assistant", "text": "Yeah, it's a regular routine checkup."},
+            {"role": "user", "text": "Peshawar, I can help you with that. Could you please tell me the reason for the appointment?"},
+            {"role": "user", "text": "Okay, got it."}
+        ],
+        "extra_metadata": {"call_type": "live-call"}
+    })
+
+    parsed = ReportService._parse_chat_history(live_raw)
+    assert len(parsed) == 4
+    assert parsed[0]["role"] == "user"
+    assert parsed[0]["text"] == "Yes, thank you for calling Citrus Smiles Dental. My name is Vaishak."
+    assert parsed[1]["role"] == "assistant"
+    assert parsed[1]["text"] == "Yeah, it's a regular routine checkup."
+    assert parsed[3]["text"] == "Okay, got it."
+
+
+def test_mock_call_chat_history_backward_compatibility():
+    """
+    Verifies that LiveKit ChatContext mock calls (type: message, content: [...])
+    continue to parse properly without regression.
+    """
+    mock_raw = json.dumps({
+        "items": [
+            {
+                "type": "message",
+                "role": "user",
+                "content": ["Hi, thank you for calling Citrus Smiles. This is Vaishag. How may I help you today?"],
+                "interrupted": False
+            },
+            {
+                "type": "message",
+                "role": "assistant",
+                "content": ["Hi, this is Marco Aybar. I need to reschedule my appointment with Dr. Gupta on November thirteenth."],
+                "interrupted": False
+            }
+        ]
+    })
+
+    parsed = ReportService._parse_chat_history(mock_raw)
+    assert len(parsed) == 2
+    assert parsed[0]["role"] == "user"
+    assert "Citrus Smiles" in parsed[0]["text"]
+    assert parsed[1]["role"] == "assistant"
+    assert "Marco Aybar" in parsed[1]["text"]
+
+
+def test_speaker_attributed_chat_history_parsing():
+    """
+    Verifies that transcripts using 'speaker' instead of 'role' correctly map
+    'Front Desk Trainee' -> 'user' and 'Patient' -> 'assistant'.
+    """
+    speaker_raw = json.dumps({
+        "items": [
+            {"speaker": "Front Desk Trainee", "text": "How can I help you today?"},
+            {"speaker": "Patient", "text": "I need to book a cleaning appointment."}
+        ]
+    })
+
+    parsed = ReportService._parse_chat_history(speaker_raw)
+    assert len(parsed) == 2
+    assert parsed[0]["role"] == "user"
+    assert parsed[0]["text"] == "How can I help you today?"
+    assert parsed[1]["role"] == "assistant"
+    assert parsed[1]["text"] == "I need to book a cleaning appointment."
+
+
+def test_row_to_report_detail_returns_chat_history_for_live_call():
+    """
+    Verifies that ReportService._row_to_report_detail populates ReportDetail.chat_history
+    for live consultation calls.
+    """
+    mock_repo = MagicMock(spec=IReportRepository)
+    mock_eval = MagicMock(spec=GeminiEvaluationService)
+    service = ReportService(mock_repo, mock_eval)
+
+    live_call_row = {
+        "job_id": "AJ_rV3pw8n9CH8u",
+        "room_id": "RM_dfup3rTwPBvM",
+        "room": "sos-call-8zua",
+        "started_at": "2026-11-18T04:39:50.479937Z",
+        "ended_at": "2026-11-18T04:41:35.899553Z",
+        "duration_seconds": 105,
+        "summary": json.dumps({"overall_score": 62}),
+        "overall_score": 62,
+        "chat_history": json.dumps({
+            "items": [
+                {"role": "user", "text": "Yes, thank you for calling Citrus Smiles Dental. My name is Vaishak."},
+                {"role": "assistant", "text": "Yeah, it's a regular routine checkup."},
+                {"role": "user", "text": "Okay, got it."}
+            ],
+            "extra_metadata": {"call_type": "live-call"}
+        }),
+        "status": "completed",
+        "customer_name": "rahul",
+        "agent_type": "SOS Live Copilot",
+        "sales_rep": "VAISAKH",
+        "scenario": "dental_live_call",
+        "created_at": "2026-11-18T04:41:35.952884Z",
+    }
+
+    detail = service._row_to_report_detail(live_call_row)
+    assert detail.job_id == "AJ_rV3pw8n9CH8u"
+    assert detail.overall_score == 62
+    assert len(detail.chat_history) == 3
+    assert detail.chat_history[0]["role"] == "user"
+    assert detail.chat_history[0]["text"] == "Yes, thank you for calling Citrus Smiles Dental. My name is Vaishak."
+    assert detail.chat_history[1]["role"] == "assistant"
+    assert detail.chat_history[1]["text"] == "Yeah, it's a regular routine checkup."
+
+
+

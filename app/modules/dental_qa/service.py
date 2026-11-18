@@ -32,20 +32,21 @@ class DentalQAService:
     """
 
     @staticmethod
-    def format_transcript(chat_history_str: Optional[str]) -> str:
+    def parse_chat_history_items(chat_history_str: Optional[str]) -> List[Dict[str, Any]]:
         """
-        Parses LiveKit chat history (JSON or list) into a clean, speaker-attributed dialogue transcript.
-        Maps speakers into:
-        - 'Front Desk Trainee' (trainee / student / agent / user depending on livekit role tagging)
-        - 'Patient' (caller / customer / simulator)
+        Parses LiveKit or Live Call chat history into a standardized list of message dicts:
+        [{"role": "user"|"assistant", "speaker": "Front Desk Trainee"|"Patient", "text": str, "interrupted": bool}].
+        Supports:
+        1. LiveKit ChatContext schema (type="message", role="user"|"assistant", content=[...])
+        2. Live Call STT / Copilot schema (role="user"|"assistant" or speaker="...", text="...")
+        3. Plain list of pre-formatted message dicts
         """
         if not chat_history_str:
-            return "No transcript available."
+            return []
 
-        # If it's already plain text (e.g. from benchmark or unit test), return as-is
         trimmed = chat_history_str.strip()
         if not (trimmed.startswith("{") or trimmed.startswith("[")):
-            return trimmed
+            return []
 
         try:
             data = json.loads(trimmed)
@@ -55,11 +56,11 @@ class DentalQAService:
             elif isinstance(data, list):
                 items = data
 
-            lines: List[str] = []
+            parsed_items: List[Dict[str, Any]] = []
             for item in items:
                 if not isinstance(item, dict):
                     continue
-                if "type" in item and item.get("type") != "message":
+                if "type" in item and item.get("type") not in ("message", "text", "transcript"):
                     continue
 
                 role = (item.get("role") or "").lower()
@@ -84,24 +85,60 @@ class DentalQAService:
                 if not text:
                     continue
 
-                # Role attribution: Trainee vs Patient
+                # Speaker and role normalization: Trainee vs Patient
                 speaker_val = (item.get("speaker") or "").strip().lower()
-                if speaker_val in ["trainee", "front desk trainee", "agent", "user"]:
-                    speaker = "Front Desk Trainee"
-                elif speaker_val in ["customer", "patient", "caller", "simulator"]:
-                    speaker = "Patient"
+                if speaker_val:
+                    if any(k in speaker_val for k in ["trainee", "front desk", "rep", "agent", "user"]):
+                        speaker = "Front Desk Trainee"
+                        normalized_role = "user"
+                    elif any(k in speaker_val for k in ["customer", "patient", "caller", "simulator"]):
+                        speaker = "Patient"
+                        normalized_role = "assistant"
+                    else:
+                        speaker = "Front Desk Trainee" if role in ["user", "trainee", "human", "agent"] else "Patient"
+                        normalized_role = "user" if speaker == "Front Desk Trainee" else "assistant"
                 elif role in ["user", "trainee", "human", "agent"]:
                     speaker = "Front Desk Trainee"
+                    normalized_role = "user"
                 else:
                     speaker = "Patient"
+                    normalized_role = "assistant"
 
-                lines.append(f"{speaker}: {text}")
+                parsed_items.append({
+                    "role": normalized_role,
+                    "speaker": speaker,
+                    "text": text,
+                    "interrupted": item.get("interrupted", False),
+                })
 
-            return "\n".join(lines) if lines else "No dialogue recorded in transcript."
+            return parsed_items
 
         except Exception as e:
             logger.warning(f"Error parsing chat history JSON for dental transcript: {e}")
-            return chat_history_str
+            return []
+
+    @classmethod
+    def format_transcript(cls, chat_history_str: Optional[str]) -> str:
+        """
+        Parses LiveKit chat history (JSON or list) into a clean, speaker-attributed dialogue transcript.
+        Maps speakers into:
+        - 'Front Desk Trainee' (trainee / student / agent / user depending on livekit role tagging)
+        - 'Patient' (caller / customer / simulator)
+        """
+        if not chat_history_str:
+            return "No transcript available."
+
+        # If it's already plain text (e.g. from benchmark or unit test), return as-is
+        trimmed = chat_history_str.strip()
+        if not (trimmed.startswith("{") or trimmed.startswith("[")):
+            return trimmed
+
+        parsed_items = cls.parse_chat_history_items(chat_history_str)
+        if not parsed_items:
+            return "No dialogue recorded in transcript."
+
+        lines = [f"{item['speaker']}: {item['text']}" for item in parsed_items]
+        return "\n".join(lines)
 
     @staticmethod
     def is_transcript_empty(transcript: Optional[str]) -> bool:

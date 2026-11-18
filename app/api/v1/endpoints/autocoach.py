@@ -185,8 +185,13 @@ async def receive_autocoach_report(
         room_id = payload.room_id or payload.room_name or payload.job_id
         room_name = payload.room_name or payload.room_id or "AutoCoach-Dental"
 
-        # Adapt chat history to dict structure if sent as a list
+        # Adapt chat history to dict structure if sent as a list or JSON string
         raw_chat = payload.chat_history
+        if isinstance(raw_chat, str):
+            try:
+                raw_chat = json.loads(raw_chat)
+            except Exception:
+                pass
         if isinstance(raw_chat, list):
             chat_history_dict = {"items": raw_chat}
         elif isinstance(raw_chat, dict):
@@ -272,8 +277,13 @@ async def receive_live_call_report(
         room_id = payload.room_id or payload.room_name or payload.job_id
         room_name = payload.room_name or payload.room_id or "sos-call-dental"
 
-        # Adapt chat history to dict structure if sent as a list
+        # Adapt chat history to dict structure if sent as a list or JSON string
         raw_chat = payload.chat_history
+        if isinstance(raw_chat, str):
+            try:
+                raw_chat = json.loads(raw_chat)
+            except Exception:
+                pass
         if isinstance(raw_chat, list):
             chat_history_dict = {"items": raw_chat}
         elif isinstance(raw_chat, dict):
