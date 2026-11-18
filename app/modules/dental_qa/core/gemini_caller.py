@@ -115,6 +115,13 @@ async def execute_gemini_structured_call(
 
                     # Handle Rate Limits (429) & Server Errors (5xx)
                     if res.status_code in [429, 500, 502, 503, 504]:
+                        error_detail = ""
+                        try:
+                            err_json = res.json()
+                            error_detail = err_json.get("error", {}).get("message", res.text[:200])
+                        except Exception:
+                            error_detail = res.text[:200]
+
                         retry_after_hdr = res.headers.get("retry-after")
                         if retry_after_hdr:
                             try:
@@ -127,7 +134,7 @@ async def execute_gemini_structured_call(
                             sleep_sec = (base * (2.0 ** attempt)) + random.uniform(0.5, 2.0)
 
                         logger.warning(
-                            f"Gemini {stage_name} returned status {res.status_code} on attempt {attempt + 1}/{retries}. "
+                            f"Gemini {stage_name} returned status {res.status_code} ({error_detail}) on attempt {attempt + 1}/{retries}. "
                             f"Backing off for {sleep_sec:.1f}s before retry..."
                         )
                         await asyncio.sleep(sleep_sec)

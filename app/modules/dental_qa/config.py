@@ -46,7 +46,11 @@ class DentalQAConfig:
     HTTP_TIMEOUT_SECONDS: float = 120.0
     MAX_RETRIES: int = 5
     BACKOFF_FACTOR: float = 2.0
-    MAX_CONCURRENT_GEMINI_CALLS: int = 2
+
+    @property
+    def MAX_CONCURRENT_GEMINI_CALLS(self) -> int:
+        return int(os.getenv("MAX_CONCURRENT_GEMINI_CALLS", "10"))
+
     GEMINI_API_BASE_URL: str = "https://generativelanguage.googleapis.com/v1beta/models"
 
 
