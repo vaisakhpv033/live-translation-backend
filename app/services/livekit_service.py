@@ -76,7 +76,8 @@ class LiveKitRoomService(IRoomService):
                     logger.info(f"Triggering explicit agent dispatch for {agent_name} in room {room_in.name}")
                     dispatch_request = api.CreateAgentDispatchRequest(
                         agent_name=agent_name,
-                        room=room_in.name
+                        room=room_in.name,
+                        metadata=room_in.metadata or "",
                     )
                     await self.client.agent_dispatch.create_dispatch(dispatch_request)
                     logger.info(f"Successfully dispatched {agent_name} to room {room_in.name}")

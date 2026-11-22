@@ -1,4 +1,5 @@
 import asyncio
+import copy
 import json
 import logging
 import uuid
@@ -134,32 +135,61 @@ class LiveKitAutoCoachService(IAutoCoachService):
         trainee_name = session_in.trainee_name or "Front Desk Trainee"
 
         # Build structured metadata matching AutoCoach prompt engine and reporting expectations
-        metadata = {
-            "scenario": session_in.scenario or "dental_scheduling",
-            "persona": session_in.persona or "default",
-            "persona_name": patient_name,
-            "language": session_in.language or "en-US",
-            "difficulty": session_in.difficulty or "medium",
-            "name": patient_name,
-            "patient_name": patient_name,
-            "customer_name": patient_name,
-            "trainee_id": trainee_id,
-            "trainee_name": trainee_name,
-        }
-        if session_in.gender:
-            metadata["gender"] = session_in.gender
-        if session_in.voice:
-            metadata["voice"] = session_in.voice
-        if session_in.custom_instructions:
-            metadata["custom_instructions"] = session_in.custom_instructions
-        if session_in.reports_webhook_url:
-            metadata["reports_webhook_url"] = session_in.reports_webhook_url
-        if session_in.type is not None:
-            metadata["type"] = session_in.type
-        if session_in.optional_data is not None:
-            metadata["optional_data"] = session_in.optional_data
-        if session_in.extra_metadata:
-            metadata.update(session_in.extra_metadata)
+        # Backward-compatibility: Check if caller supplied structured session_config for ira-voice-agent
+        has_session_config = bool(
+            session_in.extra_metadata and "session_config" in session_in.extra_metadata
+        )
+        is_ira_voice_agent = (session_in.agent_name == "ira-voice-agent")
+
+        if is_ira_voice_agent and has_session_config:
+            # 1. Cleanly lift structured session_config to root for ira-voice-agent
+            raw_cfg = session_in.extra_metadata["session_config"]
+            if isinstance(raw_cfg, str):
+                try:
+                    metadata = json.loads(raw_cfg)
+                except Exception:
+                    metadata = {"session_config": raw_cfg}
+            elif isinstance(raw_cfg, dict):
+                metadata = copy.deepcopy(raw_cfg)
+            else:
+                metadata = {"session_config": raw_cfg}
+
+            # Preserve correlation and audit fields in the 'metadata' sub-dictionary
+            meta_sub = metadata.setdefault("metadata", {})
+            meta_sub["scenario"] = session_in.scenario or "doctor_detailing"
+            meta_sub["trainee_id"] = trainee_id
+            meta_sub["trainee_name"] = trainee_name
+            meta_sub["doctor_name"] = patient_name
+            if session_in.reports_webhook_url:
+                meta_sub["reports_webhook_url"] = session_in.reports_webhook_url
+        else:
+            # 2. 100% Preserved legacy dental flat structure for autocoach-customer-sts
+            metadata = {
+                "scenario": session_in.scenario or "dental_scheduling",
+                "persona": session_in.persona or "default",
+                "persona_name": patient_name,
+                "language": session_in.language or "en-US",
+                "difficulty": session_in.difficulty or "medium",
+                "name": patient_name,
+                "patient_name": patient_name,
+                "customer_name": patient_name,
+                "trainee_id": trainee_id,
+                "trainee_name": trainee_name,
+            }
+            if session_in.gender:
+                metadata["gender"] = session_in.gender
+            if session_in.voice:
+                metadata["voice"] = session_in.voice
+            if session_in.custom_instructions:
+                metadata["custom_instructions"] = session_in.custom_instructions
+            if session_in.reports_webhook_url:
+                metadata["reports_webhook_url"] = session_in.reports_webhook_url
+            if session_in.type is not None:
+                metadata["type"] = session_in.type
+            if session_in.optional_data is not None:
+                metadata["optional_data"] = session_in.optional_data
+            if session_in.extra_metadata:
+                metadata.update(session_in.extra_metadata)
 
         metadata_json = json.dumps(metadata)
 
