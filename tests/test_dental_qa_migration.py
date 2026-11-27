@@ -265,9 +265,9 @@ async def test_evaluation_service_preserves_legacy_for_sbi():
             mock_dental_eval.assert_not_called()
             assert score == 85
 
-            # URL must call gemini-3.8-flash, NOT deprecated gemini-2.5-flash
+            # URL must call gemini-4-hydrogen, NOT deprecated gemini-2.5-flash
             called_url = mock_post.call_args[0][0]
-            assert "gemini-3.8-flash" in called_url
+            assert "gemini-4-hydrogen" in called_url
             assert "gemini-2.5-flash" not in called_url
 
 

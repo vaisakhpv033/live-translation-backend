@@ -799,12 +799,16 @@ class GeminiEvaluationService(IEvaluationService):
                 }
                 return empty_card, 0
 
-            model_name = getattr(settings, "GEMINI_EVALUATION_MODEL", None) or "gemini-3.8-flash" 
+            model_name = getattr(settings, "GEMINI_EVALUATION_MODEL", None) or "gemini-4-hydrogen"
+            thinking_level = getattr(settings, "GEMINI_EVALUATION_THINKING_LEVEL", None) or "low"
             system_prompt = SCENARIO_PROMPTS.get(scenario or "sbi", SYSTEM_PROMPT_SBI)
             response_schema = GEMINI_QA_REPORT_SCHEMA
             generation_config = {
                 "responseMimeType": "application/json",
                 "responseSchema": response_schema,
+                "thinkingConfig": {
+                    "thinkingLevel": thinking_level,
+                },
             }
 
         prompt = f"{system_prompt}\n\nHere is the conversation transcript:\n{transcript}"
@@ -875,7 +879,9 @@ class GeminiEvaluationService(IEvaluationService):
         transcript = self._format_transcript_career(chat_history_str)
         prompt = f"{CAREER_EXTRACTION_SYSTEM_PROMPT}\n\nHere is the conversation transcript:\n{transcript}"
 
-        url = f"https://generativelanguage.googleapis.com/v1beta/models/gemini-3.8-flash:generateContent?key={api_key}"
+        model_name = getattr(settings, "GEMINI_EVALUATION_MODEL", None) or "gemini-4-hydrogen"
+        thinking_level = getattr(settings, "GEMINI_EVALUATION_THINKING_LEVEL", None) or "low"
+        url = f"https://generativelanguage.googleapis.com/v1beta/models/{model_name}:generateContent?key={api_key}"
         headers = {"Content-Type": "application/json"}
 
         payload = {
@@ -886,7 +892,10 @@ class GeminiEvaluationService(IEvaluationService):
             ],
             "generationConfig": {
                 "responseMimeType": "application/json",
-                "responseSchema": CAREER_EXTRACTION_SCHEMA
+                "responseSchema": CAREER_EXTRACTION_SCHEMA,
+                "thinkingConfig": {
+                    "thinkingLevel": thinking_level,
+                },
             }
         }
 

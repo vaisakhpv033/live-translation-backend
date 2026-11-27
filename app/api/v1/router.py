@@ -30,6 +30,10 @@ api_router.include_router(autocoach.router, prefix="/autocoach", tags=["AutoCoac
 api_router.include_router(patients.router, prefix="/patients", tags=["Patients"])
 api_router.include_router(appointments.router, prefix="/appointments", tags=["Appointments"])
 
+# USV Doctor Detailing Module
+from app.modules.usv_doctor.router import router as usv_doctor_router
+api_router.include_router(usv_doctor_router, prefix="/usv-doctor", tags=["USV Doctor"])
+
 # Pronunciation Assessment Module (conditionally mounted following Open/Closed Principle)
 from app.core.config import get_settings
 settings = get_settings()

@@ -40,9 +40,9 @@ class DentalQAConfig:
         s = self._get_app_settings()
         if s and getattr(s, "GEMINI_EVALUATION_MODEL", None):
             return s.GEMINI_EVALUATION_MODEL
-        return os.getenv("GEMINI_EVALUATION_MODEL", "gemini-3.8-flash")
+        return os.getenv("GEMINI_EVALUATION_MODEL", "gemini-4-hydrogen")
 
-    GEMINI_THINKING_LEVEL: str = "high"
+    GEMINI_THINKING_LEVEL: str = "low"
     HTTP_TIMEOUT_SECONDS: float = 120.0
     MAX_RETRIES: int = 5
     BACKOFF_FACTOR: float = 2.0

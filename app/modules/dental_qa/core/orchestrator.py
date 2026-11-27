@@ -304,33 +304,27 @@ async def evaluate_dental_call(
     )
 
     # Aggregate token metrics & costs across all executed Gemini calls
-    p_tokens = (
-        sop_usage.get("promptTokenCount", 0)
-        + clinic_usage.get("promptTokenCount", 0)
-        + voice_usage.get("promptTokenCount", 0)
-        + behavioral_usage.get("promptTokenCount", 0)
-        + stage4_usage.get("promptTokenCount", 0)
-    )
-    c_tokens = (
-        sop_usage.get("candidatesTokenCount", 0)
-        + clinic_usage.get("candidatesTokenCount", 0)
-        + voice_usage.get("candidatesTokenCount", 0)
-        + behavioral_usage.get("candidatesTokenCount", 0)
-        + stage4_usage.get("candidatesTokenCount", 0)
-    )
-    t_tokens = (
-        sop_usage.get("thoughtsTokenCount", 0)
-        + clinic_usage.get("thoughtsTokenCount", 0)
-        + voice_usage.get("thoughtsTokenCount", 0)
-        + behavioral_usage.get("thoughtsTokenCount", 0)
-        + stage4_usage.get("thoughtsTokenCount", 0)
-    )
-    cost_usd = round(
-        ((p_tokens / 1_000_000.0) * 0.75) + (((c_tokens + t_tokens) / 1_000_000.0) * 3.75), 6
+    usages = [sop_usage, clinic_usage, voice_usage, behavioral_usage, stage4_usage]
+    p_tokens = sum(u.get("promptTokenCount", 0) for u in usages)
+    cached_tokens = sum(u.get("cachedContentTokenCount", 0) for u in usages)
+    c_tokens = sum(u.get("candidatesTokenCount", 0) for u in usages)
+    t_tokens = sum(u.get("thoughtsTokenCount", 0) for u in usages)
+
+    from app.modules.dental_qa.config import settings as dental_settings
+    from app.modules.usv_doctor.pricing import compute_qa_cost_usd
+
+    effective_model = model_name or dental_settings.GEMINI_MODEL
+    cost_usd = compute_qa_cost_usd(
+        model_name=effective_model,
+        prompt_tokens=p_tokens,
+        cached_tokens=cached_tokens,
+        candidates_tokens=c_tokens,
+        thoughts_tokens=t_tokens,
     )
 
     token_usage_dict = {
         "prompt_tokens": p_tokens,
+        "cached_tokens": cached_tokens,
         "candidates_tokens": c_tokens,
         "thoughts_tokens": t_tokens,
         "total_tokens": p_tokens + c_tokens + t_tokens,

@@ -95,6 +95,26 @@ async def run_background_evaluation(
             logger.exception(f"Unhandled exception during background evaluation for job {job_id}: {e}")
 
 
+async def run_usv_doctor_background_evaluation(job_id: str) -> None:
+    """Runs dedicated USV Doctor Detailing QA evaluation and stores QA token usage metrics."""
+    if db._async_session_factory is None:
+        logger.error(f"Cannot run USV Doctor evaluation for job {job_id}: Database session factory is None.")
+        return
+
+    logger.info(f"Starting USV Doctor background evaluation task for job: {job_id}")
+    async with db._async_session_factory() as session:
+        try:
+            from app.modules.usv_doctor.repository import UsvDoctorReportRepository
+            from app.modules.usv_doctor.service import UsvDoctorService
+
+            service = UsvDoctorService(repository=UsvDoctorReportRepository(session))
+            await service.evaluate_and_update(job_id)
+            await session.commit()
+        except Exception as e:
+            await session.rollback()
+            logger.exception(f"Unhandled exception during USV Doctor evaluation for job {job_id}: {e}")
+
+
 async def recover_stuck_reports(threshold_seconds: int = 300) -> None:
     """
     Scans the database for reports with status 'ongoing' that exceed threshold_seconds
@@ -108,9 +128,6 @@ async def recover_stuck_reports(threshold_seconds: int = 300) -> None:
         try:
             repository = SQLAlchemyReportRepository(session)
             ongoing_reports = await repository.get_ongoing_reports()
-
-            if not ongoing_reports:
-                return
 
             stuck_count = 0
             for r in ongoing_reports:
@@ -127,6 +144,21 @@ async def recover_stuck_reports(threshold_seconds: int = 300) -> None:
                     )
                     # Dispatch as a separate background task to run concurrently
                     asyncio.create_task(run_background_evaluation(job_id, chat_history, scenario))
+
+            # Recover stuck USV Doctor reports in dedicated table
+            from app.modules.usv_doctor.repository import UsvDoctorReportRepository
+            usv_repo = UsvDoctorReportRepository(session)
+            usv_ongoing = await usv_repo.get_ongoing_reports()
+            for ur in usv_ongoing:
+                created_at = ur.get("created_at")
+                if is_stuck(created_at, threshold_seconds):
+                    stuck_count += 1
+                    job_id = ur["job_id"]
+                    logger.info(
+                        f"Recovering stuck USV Doctor evaluation for job {job_id} "
+                        f"(created_at={created_at}, threshold={threshold_seconds}s)"
+                    )
+                    asyncio.create_task(run_usv_doctor_background_evaluation(job_id))
 
             if stuck_count > 0:
                 logger.info(f"Stuck reports recovery sweep completed: Recovered {stuck_count} reports.")

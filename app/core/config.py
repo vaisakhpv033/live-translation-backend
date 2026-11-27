@@ -28,7 +28,22 @@ class Settings(BaseSettings):
 
     # Gemini API (for report evaluation)
     GEMINI_API_KEY: str = Field(description="Gemini API key for chat transcript evaluation")
-    GEMINI_EVALUATION_MODEL: str = Field(default="gemini-3.8-flash", description="Gemini model for QA evaluation")
+    GEMINI_EVALUATION_MODEL: str = Field(default="gemini-4-hydrogen", description="Gemini model for QA evaluation")
+    GEMINI_EVALUATION_THINKING_LEVEL: str = Field(default="low", description="Thinking level for QA evaluation (low, medium, high, xhigh)")
+
+    # USV Doctor AutoCoach Post-Call Reporting Webhook
+    AUTOCOACH_REPORT_WEBHOOK_URL: str = Field(
+        default="https://translation.vaisakhpv.space/api/v1/usv-doctor/reports",
+        description="Webhook URL injected into ira-voice-agent reporting config",
+    )
+    AUTOCOACH_REPORT_ALLOW_LOCAL: bool = Field(
+        default=False,
+        description="Allow localhost/private IPs in agent reporting SSRF checks",
+    )
+    AUTOCOACH_REPORT_WEBHOOK_SECRET: str = Field(
+        default="",
+        description="Optional shared secret for authenticating post-call reporting webhooks",
+    )
 
     # Twilio SIP Telephony
     TWILIO_PHONE_NUMBER: str = Field(default="", description="Twilio phone number in E.164 format (e.g. +16183427090)")

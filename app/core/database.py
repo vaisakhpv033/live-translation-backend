@@ -36,12 +36,29 @@ async def init_db(database_url: str) -> None:
     # Create tables (import models before this runs so they register with Base)
     from app.models import report, career_data  # noqa: F401
     from app.modules.dental_qa.models import DentalCallEvaluation  # noqa: F401
+    from app.modules.usv_doctor.models import UsvDoctorReport  # noqa: F401
     async with _engine.begin() as conn:
         await conn.run_sync(Base.metadata.create_all)
         try:
             await conn.execute(text("ALTER TABLE dental_evaluations ADD COLUMN IF NOT EXISTS voice_rating_audit TEXT;"))
         except Exception as e:
             logger.debug(f"Column migration check note for voice_rating_audit: {e}")
+
+        usv_alter_statements = [
+            "ALTER TABLE usv_doctor_reports ADD COLUMN IF NOT EXISTS agent_input_cached_tokens INTEGER DEFAULT 0;",
+            "ALTER TABLE usv_doctor_reports ADD COLUMN IF NOT EXISTS agent_input_text_tokens INTEGER DEFAULT 0;",
+            "ALTER TABLE usv_doctor_reports ADD COLUMN IF NOT EXISTS agent_output_text_tokens INTEGER DEFAULT 0;",
+            "ALTER TABLE usv_doctor_reports ADD COLUMN IF NOT EXISTS agent_reasoning_tokens INTEGER DEFAULT 0;",
+            "ALTER TABLE usv_doctor_reports ADD COLUMN IF NOT EXISTS agent_cost_usd DOUBLE PRECISION DEFAULT 0.0;",
+            "ALTER TABLE usv_doctor_reports ADD COLUMN IF NOT EXISTS qa_cached_tokens INTEGER DEFAULT 0;",
+            "ALTER TABLE usv_doctor_reports ADD COLUMN IF NOT EXISTS qa_cost_usd DOUBLE PRECISION DEFAULT 0.0;",
+            "ALTER TABLE usv_doctor_reports ADD COLUMN IF NOT EXISTS total_cost_usd DOUBLE PRECISION DEFAULT 0.0;",
+        ]
+        for ddl in usv_alter_statements:
+            try:
+                await conn.execute(text(ddl))
+            except Exception as e:
+                logger.debug(f"Column migration check note for usv_doctor_reports: {e}")
     logger.info("Database tables created successfully.")
 
 
